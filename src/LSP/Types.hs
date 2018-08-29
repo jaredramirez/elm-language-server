@@ -1,6 +1,8 @@
 module LSP.Types
   ( IncomingMessage(..)
   , Method(..)
+  , Position(..)
+  , Range(..)
   , OutgoingMessage(..)
   , OutgoingError(..)
   , Error(..)
@@ -8,6 +10,7 @@ module LSP.Types
 
 import           Data.Text (Text)
 
+-- INCOMING DATA --
 data IncomingMessage
   = RequestMessage Text
                    Method
@@ -18,6 +21,13 @@ data Method =
   CancelRequest
   deriving (Show)
 
+newtype Position =
+  Position (Int, Int)
+
+newtype Range =
+  Range (Position, Position)
+
+-- OUTGOING DATA --
 data OutgoingMessage =
   ResponseMessage (Maybe Text)
                   (Maybe OutgoingError)

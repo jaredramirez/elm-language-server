@@ -14,7 +14,7 @@ import           Misc                 ((<|))
 
 instance FromJSON Method where
   parseJSON =
-    A.withText "Incoming Message" <| \case
+    A.withText "Method" <| \case
       "$/cancelRequest" -> return Types.CancelRequest
       _ -> fail "Did not have \"jsonrpc\" of \"2.0\""
 
