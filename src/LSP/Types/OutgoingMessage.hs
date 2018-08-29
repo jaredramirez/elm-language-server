@@ -25,7 +25,7 @@ encodeError :: OutgoingError -> [(Text, Value)]
 encodeError error = ["error" .= error]
 
 instance A.ToJSON OutgoingMessage where
-  toJSON (Types.ResponseMessage maybeId maybeError) =
+  toJSON (Types.ResponseMessage (maybeId, maybeError)) =
     let id = maybeId |> encodeId
         error = maybeError |> fmap encodeError |> Maybe.fromMaybe []
     in A.object (id ++ error)

@@ -12,7 +12,7 @@ import qualified LSP.Types            as Types
 import qualified LSP.Types.Error
 
 instance A.ToJSON OutgoingError where
-  toJSON (Types.ResponseError err message) =
+  toJSON (Types.ResponseError (err, message)) =
     A.object ["code" .= err, "message" .= message]
 
 encode :: OutgoingError -> BS.ByteString

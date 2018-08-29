@@ -3,6 +3,7 @@ module LSP.Types
   , Method(..)
   , Position(..)
   , Range(..)
+  , Location(..)
   , OutgoingMessage(..)
   , OutgoingError(..)
   , Error(..)
@@ -27,16 +28,15 @@ newtype Position =
 newtype Range =
   Range (Position, Position)
 
--- OUTGOING DATA --
-data OutgoingMessage =
-  ResponseMessage (Maybe Text)
-                  (Maybe OutgoingError)
-  deriving (Show)
+newtype Location =
+  Location (Text, Range)
 
-data OutgoingError =
-  ResponseError Error
-                Text
-  deriving (Show)
+-- OUTGOING DATA --
+newtype OutgoingMessage =
+  ResponseMessage (Maybe Text, Maybe OutgoingError)
+
+newtype OutgoingError =
+  ResponseError (Error, Text)
 
 data Error
   = ParseError
