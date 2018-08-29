@@ -1,5 +1,5 @@
 name:                elm-language-server
-version:             0.1.0.0
+version:             0.0.1
 github:              "jaredramirez/elm-language-server"
 license:             BSD3
 author:              "Jared Ramirez"
@@ -21,6 +21,10 @@ description:         Please see the README on GitHub at <https://github.com/jare
 
 dependencies:
 - base >= 4.7 && < 5
+- text
+- aeson
+- unordered-containers
+- bytestring
 
 library:
   source-dirs: src
