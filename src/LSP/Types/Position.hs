@@ -2,9 +2,10 @@
 
 module LSP.Types.Position
   ( decode
+  , encode
   ) where
 
-import           Data.Aeson           (FromJSON, Value, (.:))
+import           Data.Aeson           (FromJSON, ToJSON, Value, (.:), (.=))
 import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
 import           LSP.Types            (Position)
@@ -17,3 +18,10 @@ instance FromJSON Position where
 
 decode :: BS.ByteString -> Either String Position
 decode = A.eitherDecode'
+
+instance ToJSON Position where
+  toJSON (Types.Position (line, character)) =
+    A.object ["line" .= line, "character" .= character]
+
+encode :: Position -> BS.ByteString
+encode = A.encode

@@ -4,7 +4,7 @@ module LSP.Types.Location
   ( decode
   ) where
 
-import           Data.Aeson           (FromJSON, Value, (.:))
+import           Data.Aeson           (FromJSON, ToJSON, Value, (.:), (.=))
 import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
 import           LSP.Types            (Location)
@@ -18,3 +18,10 @@ instance FromJSON Location where
 
 decode :: BS.ByteString -> Either String Location
 decode = A.eitherDecode'
+
+instance ToJSON Location where
+  toJSON (Types.Location (uri, range)) =
+    A.object ["uri" .= uri, "range" .= range]
+
+encode :: Location -> BS.ByteString
+encode = A.encode

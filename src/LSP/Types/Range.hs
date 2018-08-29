@@ -4,7 +4,7 @@ module LSP.Types.Range
   ( decode
   ) where
 
-import           Data.Aeson           (FromJSON, Value, (.:))
+import           Data.Aeson           (FromJSON, ToJSON, Value, (.:), (.=))
 import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
 import           LSP.Types            (Range)
@@ -18,3 +18,9 @@ instance FromJSON Range where
 
 decode :: BS.ByteString -> Either String Range
 decode = A.eitherDecode'
+
+instance ToJSON Range where
+  toJSON (Types.Range (start, end)) = A.object ["start" .= start, "end" .= end]
+
+encode :: Range -> BS.ByteString
+encode = A.encode
