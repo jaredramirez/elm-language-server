@@ -1,8 +1,9 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.Types.IncomingMessage
-  ( decode
+module LSP.Data.IncomingMessage
+  ( IncomingMessage(..)
+  , decode
   ) where
 
 import           Control.Applicative  ((<|>))
@@ -13,19 +14,23 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashMap.Strict  as HM
 import           Data.Text            (Text)
 import qualified Data.Text            as T
-import           LSP.Types            (IncomingMessage)
-import qualified LSP.Types            as Types
-import qualified LSP.Types.Method
+import           LSP.Data.Method      (Method)
 import           Misc                 ((<|), (|>))
+
+data IncomingMessage
+  = RequestMessage Text
+                   Method
+  | NotificationMessage Method
+  deriving (Show)
 
 jsonrpcDecoder :: HM.HashMap Text Value -> Parser Text
 jsonrpcDecoder v = v .: "jsonrpc"
 
 requestMessageDecoder :: HM.HashMap Text Value -> Parser IncomingMessage
-requestMessageDecoder v = Types.RequestMessage <$> v .: "id" <*> v .: "method"
+requestMessageDecoder v = RequestMessage <$> v .: "id" <*> v .: "method"
 
 notificationMessageDecoder :: HM.HashMap Text Value -> Parser IncomingMessage
-notificationMessageDecoder v = Types.NotificationMessage <$> v .: "method"
+notificationMessageDecoder v = NotificationMessage <$> v .: "method"
 
 instance A.FromJSON IncomingMessage where
   parseJSON =

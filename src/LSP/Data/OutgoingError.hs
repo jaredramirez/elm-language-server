@@ -1,18 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.Types.OutgoingError
-  (
+module LSP.Data.OutgoingError
+  ( OutgoingError(..)
+  , encode
   ) where
 
 import           Data.Aeson           (Value, (.=))
 import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
-import           LSP.Types            (OutgoingError)
-import qualified LSP.Types            as Types
-import qualified LSP.Types.Error
+import           Data.Text            (Text)
+import           LSP.Data.Error       (Error)
+
+newtype OutgoingError =
+  ResponseError (Error, Text)
 
 instance A.ToJSON OutgoingError where
-  toJSON (Types.ResponseError (err, message)) =
+  toJSON (ResponseError (err, message)) =
     A.object ["code" .= err, "message" .= message]
 
 encode :: OutgoingError -> BS.ByteString
