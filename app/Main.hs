@@ -1,6 +1,7 @@
 module Main where
 
-import qualified Lib
+import qualified Control.Monad
+import qualified LSP.Server
 
 main :: IO ()
-main = Lib.someFunc
+main = Control.Monad.void LSP.Server.run

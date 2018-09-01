@@ -6,5 +6,8 @@ build:
 build-watch:
 	stack build --file-watch
 
-run:
-	stack exec
+run: build
+	stack exec elm-language-server-exe
+
+install: build
+	stack install
