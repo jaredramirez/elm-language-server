@@ -9,7 +9,7 @@ import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
 import           Data.Text            (Text)
 import           LSP.Data.Method      (Method)
-import qualified LSP.Data.Misc        as Misc
+import qualified Misc
 
 newtype Unregistration =
   Unregistration (Text, Method)

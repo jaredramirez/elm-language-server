@@ -1,14 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module LSP.Data.State
   ( State(..)
+  , init
   ) where
 
-import           Data.Text (Text)
-import           System.IO (Handle)
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
+import           Data.Text           (Text)
+import           LSP.Log             (LogState)
+import           Prelude             hiding (init)
 
 data State = State
-  { rootPath :: Text
-  , rootUri  :: Text
-  , logger   :: Handle
-  }
+  { rootUri      :: Text
+  , documentText :: HashMap Text Text
+  } deriving (Show)
+
+init :: Text -> State
+init rootUri = State rootUri HM.empty

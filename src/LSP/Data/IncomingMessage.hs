@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module LSP.Data.IncomingMessage
   ( IncomingMessage(..)
@@ -11,13 +12,19 @@ import           Data.Aeson              (FromJSON, Value, (.:), (.:?))
 import qualified Data.Aeson              as A
 import           Data.Aeson.Types        (Parser)
 import qualified Data.Aeson.Utils        as AUtils
+import qualified Data.ByteString         as BSStrict
 import qualified Data.ByteString.Lazy    as BS
 import qualified Data.HashMap.Strict     as HM
 import           Data.Text               (Text)
 import qualified Data.Text               as T
+import qualified LSP.Data.Header         as Header
 import           LSP.Data.IncomingMethod (IncomingMethod)
 import           LSP.Data.Params         (Params)
+import           LSP.Log                 (LogState)
+import qualified LSP.Log                 as Log
 import           Misc                    ((<|), (|>))
+import           System.IO               (Handle)
+import qualified System.IO               as IO
 
 data IncomingMessage
   = RequestMessage Text
@@ -56,5 +63,18 @@ instance FromJSON IncomingMessage where
         "2.0" -> requestMessageDecoder v <|> notificationMessageDecoder v
         _ -> fail "\"jsonrpc\" must be \"2.0\""
 
-decode :: BS.ByteString -> Either String IncomingMessage
-decode = A.eitherDecode'
+decode :: Handle -> LogState -> IO (Either String IncomingMessage, LogState)
+decode handle logState =
+  getLineBSLazy >>= \header ->
+    getLineBSLazy >>= \endLine ->
+      let eitherContentLength =
+            Header.decode header >>= \contentLength ->
+              Header.decodeEndLine endLine >> return contentLength
+      in case eitherContentLength of
+           Left error -> (Left error, ) <$> Log.log (T.pack error) logState
+           Right contentLength ->
+             BS.hGet IO.stdin contentLength >>= \json ->
+               (A.eitherDecode' json, ) <$> Log.log (Log.toText json) logState
+
+getLineBSLazy :: IO BS.ByteString
+getLineBSLazy = BS.fromStrict <$> BSStrict.getLine

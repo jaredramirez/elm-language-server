@@ -4,19 +4,17 @@ module LSP.Server
   ( run
   ) where
 
-import qualified Data.ByteString          as BSStrict
 import qualified Data.ByteString.Lazy     as BS
-import           Data.Text                (Text)
 import qualified Data.Text                as Text
-import qualified LSP.Data.Header          as Header
 import qualified LSP.Data.IncomingMessage as IncomingMessage
-import qualified LSP.Data.OutgoingMessage as OutgoingMessage
+import qualified LSP.Data.IncomingMethod  as IncomingMethod
 import           LSP.Data.State           (State)
 import qualified LSP.Data.State           as State
-import           Misc                     ((<|))
-import           Prelude                  hiding (getLine, log)
+import           LSP.Log                  (LogState)
+import qualified LSP.Log                  as Log
+import qualified LSP.MessageHandler       as MessageHandler
+import           Misc                     ((|>))
 import qualified System.Directory         as Dir
-import           System.IO                (Handle)
 import qualified System.IO                as IO
 
 run :: IO Int
@@ -25,33 +23,27 @@ run = do
   IO.hSetEncoding IO.stdin IO.utf8
   IO.hSetBuffering IO.stdout IO.NoBuffering
   IO.hSetEncoding IO.stdout IO.utf8
-  log "Booting up"
-  loop Nothing
-  return 1
+  let logState = Log.init |> Log.log "Booting up"
+  logState >>= loop False Nothing
 
-loop :: Maybe State -> IO ()
-loop maybeState =
-  getLine >>= \header ->
-    getLine >>= \endLine ->
-      let eitherContentLength =
-            Header.decode header >>= \contentLength ->
-              Header.decodeEndLine endLine >> return contentLength
-      in case eitherContentLength of
-           Left error -> log error >> loop maybeState
-           Right contentLength ->
-             BS.hGet IO.stdin contentLength >>= \jsonBytestring ->
-               log jsonBytestring >>
-               case IncomingMessage.decode jsonBytestring of
-                 Left error    -> log error >> loop maybeState
-                 Right message -> log message >> loop maybeState
-
-getLine :: IO BS.ByteString
-getLine = BS.fromStrict <$> BSStrict.getLine
-
-log :: Show message => message -> IO ()
-log message =
-  let dirPath = "/Users/jaredramirez/elm-stuff/.lsp"
-      filePath = Text.append dirPath "/debug.log"
-  in Dir.createDirectoryIfMissing True (Text.unpack dirPath) >>
-     IO.openFile (Text.unpack filePath) IO.AppendMode >>= \handle ->
-       IO.hPrint handle message >> IO.hClose handle
+loop :: Bool -> Maybe State -> LogState -> IO Int
+loop isShuttingDown maybeState initialLogState =
+  IncomingMessage.decode IO.stdin initialLogState >>= \(decoded, logState) ->
+    case decoded of
+      Left error ->
+        Log.log (Text.pack error) logState >>= loop isShuttingDown maybeState
+      Right message ->
+        case message of
+          (IncomingMessage.RequestMessage id IncomingMethod.Shutdown) ->
+            loop True maybeState logState
+          (IncomingMessage.NotificationMessage IncomingMethod.Exit) ->
+            if isShuttingDown
+              then Log.log "Exiting." logState >>= Log.log "---" >> return 0
+              else Log.log "Exiting without shutdown." logState >>=
+                   Log.log "---" >>
+                   return 1
+          _ ->
+            let (nextState, nextLogState, maybeResponseByteString) =
+                  MessageHandler.handler maybeState logState message
+                response = mapM_ BS.putStr maybeResponseByteString
+            in response >> Log.flush nextLogState >>= loop False nextState

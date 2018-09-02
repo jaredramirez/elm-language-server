@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSP.Data.OutgoingMessage
-  (
+  ( OutgoingMessage(..)
   ) where
 
 import           Data.Aeson             (ToJSON, Value, (.=))
@@ -34,6 +34,3 @@ instance ToJSON result => ToJSON (OutgoingMessage result) where
         result = maybeResult |> encodeResult
         error = maybeError |> fmap encodeError |> Maybe.fromMaybe []
     in A.object (id ++ result ++ error)
-
-encode :: ToJSON result => OutgoingMessage result -> BS.ByteString
-encode = A.encode

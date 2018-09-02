@@ -10,7 +10,7 @@ import qualified Data.ByteString.Lazy as BS
 import           Data.Text            (Text)
 import           LSP.Data.Method      (Method)
 import qualified LSP.Data.Method      as M
-import qualified LSP.Data.Misc        as Misc
+import qualified Misc
 
 newtype DocumentFilter =
   DocumentFilter (Maybe Text, Maybe Text, Maybe Text)

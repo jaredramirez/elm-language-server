@@ -4,6 +4,7 @@ module Misc
   , curryTriple
   , mapLeft
   , maybeToEither
+  , andThen
   ) where
 
 (|>) :: a -> (a -> b) -> b
@@ -26,3 +27,6 @@ maybeToEither error maybe =
   case maybe of
     Nothing    -> Left error
     Just value -> Right value
+
+andThen :: Monad m => (a -> m b) -> m a -> m b
+andThen = (=<<)

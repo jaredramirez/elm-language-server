@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSP.Data.IncomingMethod
-  ( IncomingMethod(..)
+  ( InitializeParams(..)
+  , decodeInitializeParams
+  , IncomingMethod(..)
   , decode
   ) where
 
@@ -25,14 +27,35 @@ instance FromJSON InitializeParams where
   parseJSON =
     A.withObject "InitializeParams" <| \v -> InitializeParams <$> v .: "rootUri"
 
+decodeInitializeParams :: BS.ByteString -> Either String InitializeParams
+decodeInitializeParams = A.eitherDecode'
+
+-- INITIALIZED --
+initialized :: Text
+initialized = "initialized"
+
+-- SHUTDOWN --
+shutdown :: Text
+shutdown = "shutdown"
+
+-- EXIT --
+exit :: Text
+exit = "exit"
+
 -- METHODS --
-data IncomingMethod =
-  Initialize InitializeParams
+data IncomingMethod
+  = Initialize Value
+  | Initialized
+  | Shutdown
+  | Exit
   deriving (Show)
 
 incomingMethodDecoder :: HM.HashMap Text Value -> Text -> Parser IncomingMethod
 incomingMethodDecoder v key
   | key == initialize = Initialize <$> v .: "params"
+  | key == initialized = return Initialized
+  | key == shutdown = return Shutdown
+  | key == exit = return Exit
   | otherwise = fail "Unknown method"
 
 instance FromJSON IncomingMethod where
