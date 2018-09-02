@@ -5,6 +5,7 @@ module Misc
   , mapLeft
   , maybeToEither
   , andThen
+  , toInt
   ) where
 
 (|>) :: a -> (a -> b) -> b
@@ -30,3 +31,9 @@ maybeToEither error maybe =
 
 andThen :: Monad m => (a -> m b) -> m a -> m b
 andThen = (=<<)
+
+toInt :: (RealFloat r, Integral i) => Either r i -> Int
+toInt num =
+  case num of
+    Left float     -> fromIntegral (round float)
+    Right integral -> fromIntegral integral

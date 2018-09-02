@@ -7,39 +7,35 @@ module LSP.Data.IncomingMessage
   , decode
   ) where
 
-import           Control.Applicative     ((<|>))
-import           Data.Aeson              (FromJSON, Value, (.:), (.:?))
-import qualified Data.Aeson              as A
-import           Data.Aeson.Types        (Parser)
-import qualified Data.Aeson.Utils        as AUtils
-import qualified Data.ByteString         as BSStrict
-import qualified Data.ByteString.Lazy    as BS
-import qualified Data.HashMap.Strict     as HM
-import           Data.Text               (Text)
-import qualified Data.Text               as T
-import qualified LSP.Data.Header         as Header
-import           LSP.Data.IncomingMethod (IncomingMethod)
-import           LSP.Data.Params         (Params)
-import           LSP.Log                 (LogState)
-import qualified LSP.Log                 as Log
-import           Misc                    ((<|), (|>))
-import           System.IO               (Handle)
-import qualified System.IO               as IO
+import           Control.Applicative         ((<|>))
+import           Data.Aeson                  (FromJSON, Value, (.:), (.:?))
+import qualified Data.Aeson                  as A
+import           Data.Aeson.Types            (Parser)
+import qualified Data.Aeson.Utils            as AUtils
+import qualified Data.ByteString             as BSStrict
+import qualified Data.ByteString.Lazy        as BS
+import qualified Data.HashMap.Strict         as HM
+import           Data.Text                   (Text)
+import qualified Data.Text                   as T
+import qualified LSP.Data.Header             as Header
+import           LSP.Data.NotificationMethod (NotificationMethod)
+import           LSP.Data.Params             (Params)
+import           LSP.Data.RequestMethod      (RequestMethod)
+import           LSP.Log                     (LogState)
+import qualified LSP.Log                     as Log
+import           Misc                        ((<|), (|>))
+import qualified Misc
+import           System.IO                   (Handle)
+import qualified System.IO                   as IO
 
 data IncomingMessage
   = RequestMessage Text
-                   IncomingMethod
-  | NotificationMessage IncomingMethod
+                   RequestMethod
+  | NotificationMessage NotificationMethod
   deriving (Show)
 
 jsonrpcDecoder :: HM.HashMap Text Value -> Parser Text
 jsonrpcDecoder v = v .: "jsonrpc"
-
-toInt :: (RealFloat r, Integral i) => Either r i -> Int
-toInt num =
-  case num of
-    Left float     -> fromIntegral (round float)
-    Right integral -> fromIntegral integral
 
 requestMessageDecoder :: HM.HashMap Text Value -> Parser IncomingMessage
 requestMessageDecoder v =
@@ -48,7 +44,7 @@ requestMessageDecoder v =
        Just (A.String text) -> RequestMessage text <$> A.parseJSON (A.Object v)
        Just (A.Number num) ->
          RequestMessage
-           (num |> AUtils.floatingOrInteger |> toInt |> show |> T.pack) <$>
+           (num |> AUtils.floatingOrInteger |> Misc.toInt |> show |> T.pack) <$>
          A.parseJSON (A.Object v)
        Just _ -> fail "\"id\" must be string or number"
        Nothing -> fail "\"id\" is required for a request message"
@@ -73,8 +69,8 @@ decode handle logState =
       in case eitherContentLength of
            Left error -> (Left error, ) <$> Log.log (T.pack error) logState
            Right contentLength ->
-             BS.hGet IO.stdin contentLength >>= \json ->
-               (A.eitherDecode' json, ) <$> Log.log (Log.toText json) logState
+             (\json -> (A.eitherDecode' json, logState)) <$>
+             BS.hGet IO.stdin contentLength
 
 getLineBSLazy :: IO BS.ByteString
 getLineBSLazy = BS.fromStrict <$> BSStrict.getLine

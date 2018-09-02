@@ -1,10 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.Data.IncomingMethod
+module LSP.Data.RequestMethod
   ( InitializeParams(..)
-  , decodeInitializeParams
-  , IncomingMethod(..)
-  , decode
+  , RequestMethod(..)
   ) where
 
 import           Data.Aeson           (FromJSON, Value, (.:))
@@ -27,9 +25,6 @@ instance FromJSON InitializeParams where
   parseJSON =
     A.withObject "InitializeParams" <| \v -> InitializeParams <$> v .: "rootUri"
 
-decodeInitializeParams :: BS.ByteString -> Either String InitializeParams
-decodeInitializeParams = A.eitherDecode'
-
 -- INITIALIZED --
 initialized :: Text
 initialized = "initialized"
@@ -38,30 +33,19 @@ initialized = "initialized"
 shutdown :: Text
 shutdown = "shutdown"
 
--- EXIT --
-exit :: Text
-exit = "exit"
-
 -- METHODS --
-data IncomingMethod
+data RequestMethod
   = Initialize Value
   | Initialized
   | Shutdown
-  | Exit
   deriving (Show)
 
-incomingMethodDecoder :: HM.HashMap Text Value -> Text -> Parser IncomingMethod
-incomingMethodDecoder v key
+decoder :: HM.HashMap Text Value -> Text -> Parser RequestMethod
+decoder v key
   | key == initialize = Initialize <$> v .: "params"
   | key == initialized = return Initialized
   | key == shutdown = return Shutdown
-  | key == exit = return Exit
-  | otherwise = fail "Unknown method"
+  | otherwise = fail "Unknown request method"
 
-instance FromJSON IncomingMethod where
-  parseJSON =
-    A.withObject "IncomingMethod" <| \v ->
-      v .: "method" >>= incomingMethodDecoder v
-
-decode :: BS.ByteString -> Either String IncomingMethod
-decode = A.eitherDecode'
+instance FromJSON RequestMethod where
+  parseJSON = A.withObject "RequestMethod" <| \v -> v .: "method" >>= decoder v
