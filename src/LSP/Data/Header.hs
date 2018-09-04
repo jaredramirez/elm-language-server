@@ -3,11 +3,14 @@
 module LSP.Data.Header
   ( decodeEndLine
   , decode
+  , encode
   ) where
 
+import qualified Data.Binary          as Binary
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Char            as Char
 import           Data.Int             (Int64)
+import           Data.Semigroup       ((<>))
 import           Data.Text            (Text)
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as TextEncode
@@ -15,6 +18,7 @@ import qualified Data.Text.Read       as TextRead
 import           Data.Word            (Word8)
 import           Misc                 ((<|), (|>))
 import qualified Misc
+import           System.Info          as SysInfo
 
 toWord8 :: Text -> [Word8]
 toWord8 = Text.foldr (\c acc -> fromIntegral (Char.ord c) : acc) []
@@ -26,7 +30,12 @@ contentLengthHeaderLength :: Int64
 contentLengthHeaderLength = BS.length contentLengthHeader
 
 lineEnd :: BS.ByteString
-lineEnd = "\r" |> toWord8 |> BS.pack
+lineEnd =
+  let end =
+        if SysInfo.os == "mingw32"
+          then "\r\n"
+          else "\n"
+  in end |> toWord8 |> BS.pack
 
 decodeEndLine :: BS.ByteString -> Either String ()
 decodeEndLine string =
@@ -52,3 +61,8 @@ decode string =
   in if header == contentLengthHeader
        then toHeader rest
        else Left "Invalid header"
+
+encode :: BS.ByteString -> BS.ByteString
+encode content =
+  let contentLength = BS.length content
+  in contentLengthHeader <> Binary.encode contentLength <> lineEnd <> lineEnd

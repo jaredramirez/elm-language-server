@@ -4,6 +4,7 @@ module LSP.MessageHandler
   ( handler
   ) where
 
+import           Data.Aeson                  (ToJSON)
 import qualified Data.Aeson                  as A
 import qualified Data.ByteString.Lazy        as BS
 import qualified Data.HashMap.Strict         as HM
@@ -40,17 +41,19 @@ handler ::
 handler maybeState initialLogState message =
   let logState =
         Log.logDeferred ("Got message: " <> Log.toText message) initialLogState
-      toError = makeError maybeState logState Nothing
+      toNotificationError = makeNotificationError maybeState logState
+      toRequestError = makeRequestError maybeState logState
   in case (maybeState, message) of
        (Nothing, IncomingMessage.RequestMessage id (RequestMethod.Initialize paramsJson)) ->
          let params :: A.Result InitializeParams
              params = A.fromJSON paramsJson
          in case params of
-              A.Error error -> toError Error.InvalidParams (Text.pack error)
+              A.Error error ->
+                toRequestError id Error.InvalidParams (Text.pack error)
               A.Success (RequestMethod.InitializeParams rootUri) ->
                 case URI.decodePath rootUri of
                   Left message ->
-                    toError Error.InvalidParams (Text.pack message)
+                    toRequestError id Error.InvalidParams (Text.pack message)
                   Right rootUriDecoded ->
                     let nextLogState = logState |> Log.setDirPath rootUriDecoded
                         outgoingMessage =
@@ -58,12 +61,13 @@ handler maybeState initialLogState message =
                             (Just id, Just Capabilities.capabilities, Nothing)
                     in ( Just (State.init rootUriDecoded)
                        , nextLogState
-                       , Just (A.encode outgoingMessage))
+                       , Just (OutgoingMessage.encode outgoingMessage))
        (Just state, IncomingMessage.NotificationMessage (NotificationMethod.TextDocumentDidOpen paramsJson)) ->
          let params :: A.Result TextDocumentDidOpenParams
              params = A.fromJSON paramsJson
          in case params of
-              A.Error error -> toError Error.InvalidParams (Text.pack error)
+              A.Error error ->
+                toNotificationError Error.InvalidParams (Text.pack error)
               A.Success (NotificationMethod.TextDocumentDidOpenParams (uri, version, text)) ->
                 let documentText = State.DocumentText (version, text)
                     nextState =
@@ -75,25 +79,39 @@ handler maybeState initialLogState message =
                         state
                 in (Just nextState, logState, Nothing)
        (Nothing, _) ->
-         toError Error.ServerNotInitialized "Server Not Initialized"
+         toNotificationError Error.ServerNotInitialized "Server Not Initialized"
        (Just _, message) ->
          ( maybeState
          , Log.logDeferred "Method not implemented" logState
          , Nothing)
 
-makeError ::
+makeNotificationError ::
      Maybe State
   -> LogState
-  -> Maybe Text
   -> Error
   -> Text
   -> (Maybe State, LogState, Maybe BS.ByteString)
-makeError maybeState logState maybeId error text =
-  let outgoingError :: OutgoingError
-      outgoingError = OutgoingError.ResponseError (error, text)
+makeNotificationError maybeState logState error text =
+  let outgoingError = OutgoingError.ResponseError (error, text)
       outgoingMessage :: OutgoingMessage ()
       outgoingMessage =
-        OutgoingMessage.ResponseMessage (maybeId, Nothing, Just outgoingError)
+        OutgoingMessage.ResponseMessage (Nothing, Nothing, Just outgoingError)
   in ( maybeState
      , Log.logDeferred text logState
-     , Just (A.encode outgoingMessage))
+     , Just (OutgoingMessage.encode outgoingMessage))
+
+makeRequestError ::
+     Maybe State
+  -> LogState
+  -> Text
+  -> Error
+  -> Text
+  -> (Maybe State, LogState, Maybe BS.ByteString)
+makeRequestError maybeState logState id error text =
+  let outgoingError = OutgoingError.ResponseError (error, text)
+      outgoingMessage :: OutgoingMessage ()
+      outgoingMessage =
+        OutgoingMessage.ResponseMessage ((Just id), Nothing, Just outgoingError)
+  in ( maybeState
+     , Log.logDeferred text logState
+     , Just (OutgoingMessage.encode outgoingMessage))
