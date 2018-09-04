@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Misc
   ( (|>)
   , (<|)
@@ -6,7 +8,12 @@ module Misc
   , maybeToEither
   , andThen
   , toInt
+  , byteStringToText
   ) where
+
+import qualified Data.ByteString.Lazy as BS
+import           Data.Text            (Text)
+import qualified Data.Text.Encoding   as TextEncode
 
 (|>) :: a -> (a -> b) -> b
 (|>) = flip ($)
@@ -37,3 +44,9 @@ toInt num =
   case num of
     Left float     -> fromIntegral (round float)
     Right integral -> fromIntegral integral
+
+byteStringToText :: BS.ByteString -> Text
+byteStringToText byteString =
+  case TextEncode.decodeUtf8' (BS.toStrict byteString) of
+    Left _      -> ""
+    Right value -> value

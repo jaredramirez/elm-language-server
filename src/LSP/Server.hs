@@ -5,6 +5,7 @@ module LSP.Server
   ) where
 
 import qualified Data.ByteString.Lazy        as BS
+import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as Text
 import qualified LSP.Data.IncomingMessage    as IncomingMessage
 import qualified LSP.Data.NotificationMethod as NotificationMethod
@@ -15,6 +16,7 @@ import           LSP.Log                     (LogState)
 import qualified LSP.Log                     as Log
 import qualified LSP.MessageHandler          as MessageHandler
 import           Misc                        ((|>))
+import qualified Misc
 import qualified System.Directory            as Dir
 import qualified System.IO                   as IO
 
@@ -35,7 +37,7 @@ loop isShuttingDown maybeState initialLogState =
         Log.log (Text.pack error) logState >>= loop isShuttingDown maybeState
       Right message ->
         case message of
-          (IncomingMessage.RequestMessage id RequestMethod.Shutdown) ->
+          (IncomingMessage.RequestMessage _ RequestMethod.Shutdown) ->
             loop True maybeState logState
           (IncomingMessage.NotificationMessage NotificationMethod.Exit) ->
             if isShuttingDown
@@ -46,5 +48,13 @@ loop isShuttingDown maybeState initialLogState =
           _ ->
             let (nextState, nextLogState, maybeResponseByteString) =
                   MessageHandler.handler maybeState logState message
-                response = mapM_ BS.putStr maybeResponseByteString
-            in response >> Log.flush nextLogState >>= loop False nextState
+            in Log.flush nextLogState >>=
+               (\flushedLogState ->
+                  case maybeResponseByteString of
+                    Nothing -> return flushedLogState
+                    Just response ->
+                      BS.putStr response >>
+                      Log.log
+                        ("Sending " <> Misc.byteStringToText response)
+                        flushedLogState) >>=
+               loop False nextState
