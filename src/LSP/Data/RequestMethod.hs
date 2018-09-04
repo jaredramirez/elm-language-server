@@ -25,10 +25,6 @@ instance FromJSON InitializeParams where
   parseJSON =
     A.withObject "InitializeParams" <| \v -> InitializeParams <$> v .: "rootUri"
 
--- INITIALIZED --
-initialized :: Text
-initialized = "initialized"
-
 -- SHUTDOWN --
 shutdown :: Text
 shutdown = "shutdown"
@@ -36,14 +32,12 @@ shutdown = "shutdown"
 -- METHODS --
 data RequestMethod
   = Initialize Value
-  | Initialized
   | Shutdown
   deriving (Show)
 
 decoder :: HM.HashMap Text Value -> Text -> Parser RequestMethod
 decoder v key
   | key == initialize = Initialize <$> v .: "params"
-  | key == initialized = return Initialized
   | key == shutdown = return Shutdown
   | otherwise = fail "Unknown request method"
 

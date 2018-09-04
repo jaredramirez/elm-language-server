@@ -42,12 +42,14 @@ logDeferred message (LogState (maybeDirPath, existingMessages)) =
 
 flush :: LogState -> IO LogState
 flush (LogState (maybeDirPath, messages)) =
-  case maybeDirPath of
-    Nothing -> return (LogState (maybeDirPath, messages))
-    Just dirPath ->
-      let messagesChronological = reverse messages
-      in mapM_ (logInternal dirPath) messagesChronological >>
-         return (LogState (maybeDirPath, messages))
+  if null messages
+    then return (LogState (maybeDirPath, messages))
+    else case maybeDirPath of
+           Nothing -> return (LogState (maybeDirPath, messages))
+           Just dirPath ->
+             let messagesChronological = reverse messages
+             in mapM_ (logInternal dirPath) messagesChronological >>
+                return (LogState (maybeDirPath, []))
 
 toText :: Show showable => showable -> Text
 toText showable = Text.pack (show showable)

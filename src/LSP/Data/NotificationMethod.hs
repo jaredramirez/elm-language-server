@@ -14,6 +14,10 @@ import           Data.Text            (Text)
 import           Misc                 ((<|))
 import qualified Misc
 
+-- INITIALIZED --
+initialized :: Text
+initialized = "initialized"
+
 -- TEXT DOCUMENT DID OPEN --
 textDocumentDidOpen :: Text
 textDocumentDidOpen = "textDocument/didOpen"
@@ -36,12 +40,14 @@ exit = "exit"
 
 -- METHODS --
 data NotificationMethod
-  = TextDocumentDidOpen Value
+  = Initialized
+  | TextDocumentDidOpen Value
   | Exit
   deriving (Show)
 
 decoder :: HM.HashMap Text Value -> Text -> Parser NotificationMethod
 decoder v key
+  | key == initialized = return Initialized
   | key == textDocumentDidOpen = TextDocumentDidOpen <$> v .: "params"
   | key == exit = return Exit
   | otherwise = fail "Unknown notificaiton method"

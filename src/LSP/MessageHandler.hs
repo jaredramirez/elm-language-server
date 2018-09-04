@@ -78,6 +78,8 @@ handler maybeState initialLogState message =
                            (State.documentText state))
                         state
                 in (Just nextState, logState, Nothing)
+       (Just _, IncomingMessage.NotificationMessage NotificationMethod.Initialized) ->
+         (maybeState, logState, Nothing)
        (Nothing, _) ->
          toNotificationError Error.ServerNotInitialized "Server Not Initialized"
        (Just _, message) ->
@@ -111,7 +113,7 @@ makeRequestError maybeState logState id error text =
   let outgoingError = OutgoingError.ResponseError (error, text)
       outgoingMessage :: OutgoingMessage ()
       outgoingMessage =
-        OutgoingMessage.ResponseMessage ((Just id), Nothing, Just outgoingError)
+        OutgoingMessage.ResponseMessage (Just id, Nothing, Just outgoingError)
   in ( maybeState
      , Log.logDeferred text logState
      , Just (OutgoingMessage.encode outgoingMessage))

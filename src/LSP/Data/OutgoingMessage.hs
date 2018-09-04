@@ -39,7 +39,7 @@ instance ToJSON result => ToJSON (OutgoingMessage result) where
     let id = maybeId |> encodeId
         result = maybeResult |> fmap encodeResult |> Maybe.fromMaybe []
         error = maybeError |> fmap encodeError |> Maybe.fromMaybe []
-    in A.object (encodeJsonrpc : id : (result ++ error))
+    in A.object (id : encodeJsonrpc : (result ++ error))
 
 encode :: ToJSON result => OutgoingMessage result -> BS.ByteString
 encode outgoingMessage =

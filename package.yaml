@@ -27,7 +27,6 @@ dependencies:
 - unordered-containers
 - bytestring
 - directory
-- binary
 
 library:
   source-dirs: src
