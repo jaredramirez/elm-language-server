@@ -13,6 +13,7 @@ import           Misc                 ((<|))
 
 newtype TextDocumentIdentifier =
   TextDocumentIdentifier Text
+  deriving (Show)
 
 instance FromJSON TextDocumentIdentifier where
   parseJSON =

@@ -69,8 +69,9 @@ decode handle logState =
       in case eitherContentLength of
            Left error -> (Left error, ) <$> Log.log (T.pack error) logState
            Right contentLength ->
-             (\json -> (A.eitherDecode' json, logState)) <$>
-             BS.hGet IO.stdin contentLength
+             BS.hGet IO.stdin contentLength >>= \json
+               -- Log.log ("Recieved: " <> T.pack (show json)) logState >>= \nextLogState ->
+              -> return (A.eitherDecode' json, logState)
 
 getLineBSLazy :: IO BS.ByteString
 getLineBSLazy = BS.fromStrict <$> BSStrict.getLine

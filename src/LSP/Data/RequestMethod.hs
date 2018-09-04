@@ -2,16 +2,19 @@
 
 module LSP.Data.RequestMethod
   ( InitializeParams(..)
+  , TextDocumentHoverParams(..)
   , RequestMethod(..)
   ) where
 
-import           Data.Aeson           (FromJSON, Value, (.:))
-import qualified Data.Aeson           as A
-import           Data.Aeson.Types     (Parser)
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.HashMap.Strict  as HM
-import           Data.Text            (Text)
-import           Misc                 ((<|))
+import           Data.Aeson                      (FromJSON, Value, (.:))
+import qualified Data.Aeson                      as A
+import           Data.Aeson.Types                (Parser)
+import qualified Data.ByteString.Lazy            as BS
+import qualified Data.HashMap.Strict             as HM
+import           Data.Text                       (Text)
+import           LSP.Data.Position               (Position)
+import           LSP.Data.TextDocumentIdentifier (TextDocumentIdentifier)
+import           Misc                            ((<|))
 
 -- INITIALIZE --
 initialize :: Text
@@ -25,6 +28,19 @@ instance FromJSON InitializeParams where
   parseJSON =
     A.withObject "InitializeParams" <| \v -> InitializeParams <$> v .: "rootUri"
 
+-- TEXT DOCUMENT HOVER --
+textDocumentHover :: Text
+textDocumentHover = "textDocument/hover"
+
+newtype TextDocumentHoverParams =
+  TextDocumentHoverParams (TextDocumentIdentifier, Position)
+  deriving (Show)
+
+instance FromJSON TextDocumentHoverParams where
+  parseJSON =
+    A.withObject "TextDocumentHoverParams" <| \v ->
+      curry TextDocumentHoverParams <$> v .: "textDocument" <*> v .: "position"
+
 -- SHUTDOWN --
 shutdown :: Text
 shutdown = "shutdown"
@@ -32,6 +48,7 @@ shutdown = "shutdown"
 -- METHODS --
 data RequestMethod
   = Initialize Value
+  | TextDocumentHover Value
   | Shutdown
   deriving (Show)
 

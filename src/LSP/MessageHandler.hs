@@ -23,7 +23,8 @@ import           LSP.Data.OutgoingError      (OutgoingError)
 import qualified LSP.Data.OutgoingError      as OutgoingError
 import           LSP.Data.OutgoingMessage    (OutgoingMessage)
 import qualified LSP.Data.OutgoingMessage    as OutgoingMessage
-import           LSP.Data.RequestMethod      (InitializeParams)
+import           LSP.Data.RequestMethod      (InitializeParams,
+                                              TextDocumentHoverParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import           LSP.Data.State              (State)
 import qualified LSP.Data.State              as State
@@ -62,6 +63,14 @@ handler maybeState initialLogState message =
                     in ( Just (State.init rootUriDecoded)
                        , nextLogState
                        , Just (OutgoingMessage.encode outgoingMessage))
+       (Just state, IncomingMessage.RequestMessage id (RequestMethod.TextDocumentHover paramsJson)) ->
+         let params :: A.Result TextDocumentHoverParams
+             params = A.fromJSON paramsJson
+         in case params of
+              A.Error error ->
+                toRequestError id Error.InvalidParams (Text.pack error)
+              A.Success (RequestMethod.TextDocumentHoverParams (textDocumentIdentifier, position)) ->
+                (maybeState, logState, Nothing)
        (Just state, IncomingMessage.NotificationMessage (NotificationMethod.TextDocumentDidOpen paramsJson)) ->
          let params :: A.Result TextDocumentDidOpenParams
              params = A.fromJSON paramsJson

@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy as BS
 
 newtype Position =
   Position (Int, Int)
+  deriving (Show)
 
 instance FromJSON Position where
   parseJSON =
