@@ -20,16 +20,31 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/jaredramirez/elm-language-server#readme>
 
 dependencies:
-- base >= 4.7 && < 5
+- base >= 4.8 && < 5
 - text
 - aeson
 - aeson-utils
 - unordered-containers
 - bytestring
 - directory
+# For Elm Parser
+- ansi-terminal >= 0.8 && < 0.9
+- ansi-wl-pprint >= 0.6.8 && < 0.7
+- containers >= 0.5.8.2 && < 0.6
+- scientific
+- binary >= 0.8 && < 0.9
+- vector
+- filepath >= 1 && < 2.0
+- utf8-string
+- parsec
+- language-glsl >= 0.0.2 && < 0.3
 
 library:
-  source-dirs: src
+  source-dirs:
+  - src
+  - elm
+  other-extensions:
+  - TemplateHaskell
 
 executables:
   elm-language-server-exe:
