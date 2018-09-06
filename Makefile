@@ -1,4 +1,4 @@
-.PHONY: build build-watch run
+.PHONY: build run install install-deps
 
 build:
 	cabal build
@@ -6,8 +6,8 @@ build:
 run: build
 	./dist/build/elm-language-server-exe/elm-language-server-exe
 
-link: build
-
-
 install: build
-	cabal install
+	cp ./dist/build/elm-language-server-exe/elm-language-server-exe ~/.local/bin/elm-language-server-exe
+
+install-deps:
+	cabal install --only-dependencies
