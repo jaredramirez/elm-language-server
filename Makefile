@@ -1,13 +1,13 @@
 .PHONY: build build-watch run
 
 build:
-	stack build
-
-build-watch:
-	stack build --file-watch
+	cabal build
 
 run: build
-	stack exec elm-language-server-exe
+	./dist/build/elm-language-server-exe/elm-language-server-exe
+
+link: build
+
 
 install: build
-	stack install
+	cabal install
