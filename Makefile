@@ -1,4 +1,4 @@
-.PHONY: build run install install-deps
+.PHONY: build run install install-deps test test-install-deps clean
 
 build:
 	cabal build
@@ -11,3 +11,12 @@ install: build
 
 install-deps:
 	cabal install --only-dependencies
+
+test:
+	cabal test
+
+test-install-deps:
+	cabal install --only-dependencies --enable-tests
+
+clean:
+	cabal clean

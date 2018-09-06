@@ -11,8 +11,8 @@ import           Data.Text           (Text)
 import           Prelude             hiding (init)
 
 data State = State
-  { rootUri      :: Text
-  , documentText :: HashMap Text DocumentText
+  { _rootUri      :: Text
+  , _documentText :: HashMap Text DocumentText
   } deriving (Show)
 
 init :: Text -> State

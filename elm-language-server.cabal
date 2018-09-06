@@ -25,21 +25,28 @@ flag dev {
 
 library
   hs-source-dirs:
-      elm
+      elm/src
+
+  exposed-modules:
+      Elm.Name
+      Elm.Package
+      Parse.Parse
+      Reporting.Result
+      Reporting.Error
+      Reporting.Error.Syntax
+      Reporting.Region
+      AST.Valid
+      AST.Source
 
   other-modules:
       AST.Canonical
       AST.Module.Name
       AST.Optimized
-      AST.Source
       AST.Utils.Binop
       AST.Utils.Shader
       AST.Utils.Type
-      AST.Valid
       Data.Index
       Elm.Compiler.Imports
-      Elm.Name
-      Elm.Package
       Elm.Version
       Json.Decode
       Json.Decode.Error
@@ -49,7 +56,6 @@ library
       Parse.Declaration
       Parse.Expression
       Parse.Module
-      Parse.Parse
       Parse.Pattern
       Parse.Primitives
       Parse.Primitives.Internals
@@ -66,19 +72,15 @@ library
       Parse.Type
       Reporting.Annotation
       Reporting.Doc
-      Reporting.Error
       Reporting.Error.Canonicalize
       Reporting.Error.Docs
       Reporting.Error.Main
       Reporting.Error.Pattern
-      Reporting.Error.Syntax
       Reporting.Error.Type
-      Reporting.Region
       Reporting.Render.Code
       Reporting.Render.Type
       Reporting.Render.Type.Localizer
       Reporting.Report
-      Reporting.Result
       Reporting.Suggest
       Reporting.Warning
 
@@ -100,6 +102,8 @@ library
     , utf8-string
     , vector
 
+  default-language: Haskell2010
+
 
 executable elm-language-server-exe
   if flag(dev)
@@ -118,8 +122,6 @@ executable elm-language-server-exe
   other-modules:
       Paths_elm_language_server
       Analyze.Hover
-      ElmLanguageServer
-      Lib
       LSP.Data.Capabilities
       LSP.Data.DocumentFilter
       LSP.Data.DocumentSelector
@@ -142,6 +144,10 @@ executable elm-language-server-exe
       LSP.Data.URI
       LSP.Log
       LSP.MessageHandler
+      LSP.MessageHandler.Misc
+      LSP.MessageHandler.NotificationTextDocumentDidOpen
+      LSP.MessageHandler.RequestInitialize
+      LSP.MessageHandler.RequestTextDocumentHover
       LSP.Server
       Misc
 
@@ -152,6 +158,7 @@ executable elm-language-server-exe
     , aeson-utils
     , base >=4.8 && <5
     , bytestring >=0.9 && <0.11
+    , containers >=0.5.8.2 && <0.6
     , directory >=1.2.3.0 && <2.0
     , filepath >=1 && <2.0
     , text >=1 && <2
@@ -176,5 +183,10 @@ test-suite elm-language-server-test
   build-depends:
       base >=4.8 && <5
     , elm-language-server
+    , tasty >=1.1.0.3 && <1.2
+    , tasty-hunit
+    , bytestring >=0.9 && <0.11
+    , text >=1 && <2
+    , containers >=0.5.8.2 && <0.6
 
   default-language: Haskell2010

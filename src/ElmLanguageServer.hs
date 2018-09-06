@@ -1,3 +1,0 @@
-module ElmLanguageServer
-  (
-  ) where

@@ -4,21 +4,26 @@ module LSP.Server
   ( run
   ) where
 
-import qualified Data.ByteString.Lazy        as BS
-import           Data.Semigroup              ((<>))
-import qualified Data.Text                   as Text
-import qualified LSP.Data.IncomingMessage    as IncomingMessage
+import qualified AST.Valid as Valid
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.Map.Strict as Map
+import Data.Semigroup ((<>))
+import qualified Data.Text as Text
+import qualified LSP.Data.IncomingMessage as IncomingMessage
 import qualified LSP.Data.NotificationMethod as NotificationMethod
-import qualified LSP.Data.RequestMethod      as RequestMethod
-import           LSP.Data.State              (State)
-import qualified LSP.Data.State              as State
-import           LSP.Log                     (LogState)
-import qualified LSP.Log                     as Log
-import qualified LSP.MessageHandler          as MessageHandler
-import           Misc                        ((|>))
+import qualified LSP.Data.RequestMethod as RequestMethod
+import LSP.Data.State (State)
+import qualified LSP.Data.State as State
+import LSP.Log (LogState)
+import qualified LSP.Log as Log
+import qualified LSP.MessageHandler as MessageHandler
+import Misc ((|>))
 import qualified Misc
-import qualified System.Directory            as Dir
-import qualified System.IO                   as IO
+import qualified System.Directory as Dir
+import qualified System.IO as IO
+
+simpleModuleAst :: Valid.Module
+simpleModuleAst = Valid.defaultModule Map.empty [] [] [] [] []
 
 run :: IO Int
 run = do
@@ -26,6 +31,7 @@ run = do
   IO.hSetEncoding IO.stdin IO.utf8
   IO.hSetBuffering IO.stdout IO.NoBuffering
   IO.hSetEncoding IO.stdout IO.utf8
+  let mod = simpleModuleAst
   let logState = Log.init |> Log.log "Booting up"
   logState >>= loop False Nothing
 
@@ -46,15 +52,14 @@ loop isShuttingDown maybeState initialLogState =
                    Log.log "---" >>
                    return 1
           _ ->
-            let (nextState, nextLogState, maybeResponseByteString) =
-                  MessageHandler.handler maybeState logState message
-            in Log.flush nextLogState >>=
-               (\flushedLogState ->
-                  case maybeResponseByteString of
-                    Nothing -> return flushedLogState
-                    Just response ->
-                      BS.putStr response >>
-                      Log.log
-                        ("Sending " <> Misc.byteStringToText response)
-                        flushedLogState) >>=
-               loop False nextState
+            MessageHandler.handler maybeState logState message >>= \(nextState, nextLogState, maybeResponseByteString) ->
+              Log.flush nextLogState >>=
+              (\flushedLogState ->
+                 case maybeResponseByteString of
+                   Nothing -> return flushedLogState
+                   Just response ->
+                     BS.putStr response >>
+                     Log.log
+                       ("Sending " <> Misc.byteStringToText response)
+                       flushedLogState) >>=
+              loop False nextState
