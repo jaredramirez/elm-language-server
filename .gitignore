@@ -5,3 +5,6 @@ lc.log
 debug.log
 sample.txt
 sample2.txt
+
+dist
+.cabal-sandbox
