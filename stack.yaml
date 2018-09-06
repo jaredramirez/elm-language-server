@@ -4,5 +4,5 @@ packages:
 - .
 
 extra-deps:
-- language-glsl-0.2.1
 - base-4.10.1.0
+- language-glsl-0.2.1
