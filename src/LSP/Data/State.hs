@@ -1,7 +1,8 @@
 module LSP.Data.State
   ( State(..)
+  , Document(..)
   , init
-  , updateDocumentText
+  , updateDocuments
   , DocumentText(..)
   ) where
 
@@ -10,17 +11,24 @@ import qualified Data.HashMap.Strict as HM
 import           Data.Text           (Text)
 import           Prelude             hiding (init)
 
+type UriKey = Text
+
 data State = State
-  { rootUri      :: Text
-  , documentText :: HashMap Text DocumentText
+  { _rootUri   :: Text
+  , _documents :: HashMap UriKey Document
   } deriving (Show)
 
-init :: Text -> State
-init rootUri = State rootUri HM.empty
-
-updateDocumentText :: HashMap Text DocumentText -> State -> State
-updateDocumentText documentText (State rootUri _) = State rootUri documentText
+data Document = Document
+  { _text       :: DocumentText
+  , _executable :: Text
+  } deriving (Show)
 
 newtype DocumentText =
   DocumentText (Int, Text)
   deriving (Show)
+
+init :: Text -> State
+init rootUri = State rootUri HM.empty
+
+updateDocuments :: HashMap UriKey Document -> State -> State
+updateDocuments documents (State rootUri _) = State rootUri documents

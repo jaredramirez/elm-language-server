@@ -1,13 +1,24 @@
-.PHONY: build build-watch run
+.PHONY: build run copy-exe install install-deps test test-install-deps clean
 
 build:
-	stack build
+	cabal build
 
-build-watch:
-	stack build --file-watch
+run:
+	build && ./dist/build/elm-language-server-exe/elm-language-server-exe
 
-run: build
-	stack exec elm-language-server-exe
+copy-exe:
+	rm ~/.local/bin/elm-language-server-exe && cp ./dist/build/elm-language-server-exe/elm-language-server-exe ~/.local/bin/elm-language-server-exe
 
-install: build
-	stack install
+install: | build copy-exe
+
+install-deps:
+	cabal install --only-dependencies
+
+test:
+	cabal test
+
+test-install-deps:
+	cabal install --only-dependencies --enable-tests
+
+clean:
+	cabal clean

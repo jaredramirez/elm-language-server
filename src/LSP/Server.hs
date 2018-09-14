@@ -4,7 +4,9 @@ module LSP.Server
   ( run
   ) where
 
+import qualified AST.Valid                   as Valid
 import qualified Data.ByteString.Lazy        as BS
+import qualified Data.Map.Strict             as Map
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as Text
 import qualified LSP.Data.IncomingMessage    as IncomingMessage
@@ -20,6 +22,9 @@ import qualified Misc
 import qualified System.Directory            as Dir
 import qualified System.IO                   as IO
 
+simpleModuleAst :: Valid.Module
+simpleModuleAst = Valid.defaultModule Map.empty [] [] [] [] []
+
 run :: IO Int
 run = do
   IO.hSetBuffering IO.stdin IO.NoBuffering
@@ -31,30 +36,31 @@ run = do
 
 loop :: Bool -> Maybe State -> LogState -> IO Int
 loop isShuttingDown maybeState initialLogState =
-  IncomingMessage.decode IO.stdin initialLogState >>= \(decoded, logState) ->
+  IncomingMessage.decode IO.stdin initialLogState >>= \(decoded, decodeLogState) ->
     case decoded of
       Left error ->
-        Log.log (Text.pack error) logState >>= loop isShuttingDown maybeState
+        Log.log (Text.pack error) decodeLogState >>=
+        loop isShuttingDown maybeState
       Right message ->
-        case message of
-          (IncomingMessage.RequestMessage _ RequestMethod.Shutdown) ->
-            loop True maybeState logState
-          (IncomingMessage.NotificationMessage NotificationMethod.Exit) ->
-            if isShuttingDown
-              then Log.log "Exiting." logState >>= Log.log "---" >> return 0
-              else Log.log "Exiting without shutdown." logState >>=
-                   Log.log "---" >>
-                   return 1
-          _ ->
-            let (nextState, nextLogState, maybeResponseByteString) =
-                  MessageHandler.handler maybeState logState message
-            in Log.flush nextLogState >>=
-               (\flushedLogState ->
-                  case maybeResponseByteString of
-                    Nothing -> return flushedLogState
-                    Just response ->
-                      BS.putStr response >>
-                      Log.log
-                        ("Sending " <> Misc.byteStringToText response)
-                        flushedLogState) >>=
-               loop False nextState
+        Log.log ("Got message: " <> Log.toText message) decodeLogState >>= \logState ->
+          case message of
+            (IncomingMessage.RequestMessage _ RequestMethod.Shutdown) ->
+              loop True maybeState logState
+            (IncomingMessage.NotificationMessage NotificationMethod.Exit) ->
+              if isShuttingDown
+                then Log.log "Exiting." logState >>= Log.log "---" >> return 0
+                else Log.log "Exiting without shutdown." logState >>=
+                     Log.log "---" >>
+                     return 1
+            _ ->
+              MessageHandler.handler maybeState logState message >>= \(nextState, nextLogState, maybeResponseByteString) ->
+                Log.flush nextLogState >>=
+                (\flushedLogState ->
+                   case maybeResponseByteString of
+                     Nothing -> return flushedLogState
+                     Just response ->
+                       BS.putStr response >>
+                       Log.log
+                         ("Sending " <> Misc.byteStringToText response)
+                         flushedLogState) >>=
+                loop False nextState
