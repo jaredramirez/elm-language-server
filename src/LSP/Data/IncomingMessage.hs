@@ -15,6 +15,7 @@ import qualified Data.Aeson.Utils            as AUtils
 import qualified Data.ByteString             as BSStrict
 import qualified Data.ByteString.Lazy        as BS
 import qualified Data.HashMap.Strict         as HM
+import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified LSP.Data.Header             as Header

@@ -4,6 +4,8 @@ module LSP.MessageHandler
   ( handler
   ) where
 
+import           Control.Exception                                  (SomeException,
+                                                                     catch)
 import qualified Data.ByteString.Lazy                               as BS
 import           Data.Semigroup                                     ((<>))
 import           Data.Text                                          (Text)
@@ -28,10 +30,8 @@ handler ::
   -> LogState
   -> IncomingMessage
   -> IO (Maybe State, LogState, Maybe BS.ByteString)
-handler maybeState initialLogState message =
-  let logState =
-        Log.logDeferred ("Got message: " <> Log.toText message) initialLogState
-      toNotificationError error message =
+handler maybeState logState message =
+  let toNotificationError error message =
         return (makeNotificationError maybeState logState error message)
       toRequestError id error message =
         return (makeRequestError maybeState logState id error message)

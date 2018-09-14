@@ -1,13 +1,15 @@
-.PHONY: build run install install-deps test test-install-deps clean
+.PHONY: build run copy-exe install install-deps test test-install-deps clean
 
 build:
 	cabal build
 
-run: build
-	./dist/build/elm-language-server-exe/elm-language-server-exe
+run:
+	build && ./dist/build/elm-language-server-exe/elm-language-server-exe
 
-install: build
-	cp ./dist/build/elm-language-server-exe/elm-language-server-exe ~/.local/bin/elm-language-server-exe
+copy-exe:
+	rm ~/.local/bin/elm-language-server-exe && cp ./dist/build/elm-language-server-exe/elm-language-server-exe ~/.local/bin/elm-language-server-exe
+
+install: | build copy-exe
 
 install-deps:
 	cabal install --only-dependencies
