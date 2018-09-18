@@ -36,16 +36,18 @@ handler logState id paramsJson =
            Left message ->
              toRequestError Error.InvalidParams (Text.pack message)
            Right projectRoot ->
-             let nextLogState = logState |> Log.setDirPath rootUriDecoded
+             let nextLogState = logState |> Log.setDirPath projectRoot
                  exectuable = Misc.findElmExectuable (Text.unpack projectRoot)
              in exectuable >>= \case
-                  Left message ->
-                    return (toRequestError Error.InternalError message)
+                  Left message -> toRequestError Error.InternalError message
                   Right executableValue ->
-                    return $!
-                    ( Just (State.init projectRoot executableValue)
-                    , nextLogState
-                    , Just
-                        (OutgoingMessage.encode
-                           (OutgoingMessage.ResponseMessage
-                              (Just id, Just Capabilities.capabilities, Nothing))))
+                    return
+                      ( Just
+                          (State.init projectRoot (Text.pack executableValue))
+                      , nextLogState
+                      , Just
+                          (OutgoingMessage.encode
+                             (OutgoingMessage.ResponseMessage
+                                ( Just id
+                                , Just Capabilities.capabilities
+                                , Nothing))))

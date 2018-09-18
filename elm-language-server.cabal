@@ -122,6 +122,8 @@ executable elm-language-server-exe
   other-modules:
       Paths_elm_language_server
       Analyze.Hover
+      LSP.Model
+      LSP.Update
       LSP.Data.Capabilities
       LSP.Data.DocumentFilter
       LSP.Data.DocumentSelector
