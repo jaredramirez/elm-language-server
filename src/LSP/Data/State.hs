@@ -14,21 +14,22 @@ import           Prelude             hiding (init)
 type UriKey = Text
 
 data State = State
-  { _rootUri   :: Text
+  { _projectRoot   :: Text
+  , _executable :: Text
   , _documents :: HashMap UriKey Document
   } deriving (Show)
 
 data Document = Document
   { _text       :: DocumentText
-  , _executable :: Text
+  , _executableLegacy :: Text
   } deriving (Show)
 
 newtype DocumentText =
   DocumentText (Int, Text)
   deriving (Show)
 
-init :: Text -> State
-init rootUri = State rootUri HM.empty
+init :: Text -> Text -> State
+init projectRoot executable = State projectRoot executable HM.empty
 
 updateDocuments :: HashMap UriKey Document -> State -> State
-updateDocuments documents (State rootUri _) = State rootUri documents
+updateDocuments documents (State projectRoot executable _) = State projectRoot executable documents
