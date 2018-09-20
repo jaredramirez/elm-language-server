@@ -22,16 +22,13 @@ import qualified LSP.Data.Header             as Header
 import           LSP.Data.NotificationMethod (NotificationMethod)
 import           LSP.Data.Params             (Params)
 import           LSP.Data.RequestMethod      (RequestMethod)
-import           LSP.Log                     (LogState)
-import qualified LSP.Log                     as Log
 import           Misc                        ((<|), (|>))
 import qualified Misc
 import           System.IO                   (Handle)
 import qualified System.IO                   as IO
 
 data IncomingMessage
-  = RequestMessage Text
-                   RequestMethod
+  = RequestMessage Text RequestMethod
   | NotificationMessage NotificationMethod
   deriving (Show)
 
@@ -60,19 +57,20 @@ instance FromJSON IncomingMessage where
         "2.0" -> requestMessageDecoder v <|> notificationMessageDecoder v
         _ -> fail "\"jsonrpc\" must be \"2.0\""
 
-decode :: Handle -> LogState -> IO (Either String IncomingMessage, LogState)
-decode handle logState =
+decode :: Handle ->  IO (Either String IncomingMessage)
+decode handle  =
   getLineBSLazy >>= \header ->
     getLineBSLazy >>= \endLine ->
       let eitherContentLength =
             Header.decode header >>= \contentLength ->
               Header.decodeEndLine endLine >> return contentLength
       in case eitherContentLength of
-           Left error -> (Left error, ) <$> Log.log (T.pack error) logState
-           Right contentLength ->
-             BS.hGet IO.stdin contentLength >>= \json
-               -- Log.log ("Recieved: " <> T.pack (show json)) logState >>= \nextLogState ->
-              -> return (A.eitherDecode' json, logState)
+          Left error ->
+            return (Left error)
+
+          Right contentLength ->
+            BS.hGet IO.stdin contentLength >>= \json ->
+              return (A.eitherDecode' json)
 
 getLineBSLazy :: IO BS.ByteString
 getLineBSLazy = BS.fromStrict <$> BSStrict.getLine

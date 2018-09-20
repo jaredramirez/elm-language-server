@@ -12,10 +12,9 @@ import qualified Data.Text                   as Text
 import qualified LSP.Data.IncomingMessage    as IncomingMessage
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import qualified LSP.Data.RequestMethod      as RequestMethod
-import           LSP.Data.State              (State)
-import qualified LSP.Data.State              as State
-import           LSP.Log                     (LogState)
-import qualified LSP.Log                     as Log
+import           LSP.Model                   (Model)
+import qualified LSP.Model                   as M
+import qualified LSP.Update                  as U
 import qualified LSP.MessageHandler          as MessageHandler
 import           Misc                        ((|>))
 import qualified Misc
@@ -31,36 +30,29 @@ run = do
   IO.hSetEncoding IO.stdin IO.utf8
   IO.hSetBuffering IO.stdout IO.NoBuffering
   IO.hSetEncoding IO.stdout IO.utf8
-  let logState = Log.init |> Log.log "Booting up"
-  logState >>= loop False Nothing
+  loop U.init
 
-loop :: Bool -> Maybe State -> LogState -> IO Int
-loop isShuttingDown maybeState initialLogState =
-  IncomingMessage.decode IO.stdin initialLogState >>= \(decoded, decodeLogState) ->
+loop :: Model -> IO Int
+loop model =
+  IncomingMessage.decode IO.stdin >>= \decoded ->
     case decoded of
       Left error ->
-        Log.log (Text.pack error) decodeLogState >>=
-        loop isShuttingDown maybeState
+        loop model
+
       Right message ->
-        Log.log ("Got message: " <> Log.toText message) decodeLogState >>= \logState ->
-          case message of
-            (IncomingMessage.RequestMessage _ RequestMethod.Shutdown) ->
-              loop True maybeState logState
-            (IncomingMessage.NotificationMessage NotificationMethod.Exit) ->
-              if isShuttingDown
-                then Log.log "Exiting." logState >>= Log.log "---" >> return 0
-                else Log.log "Exiting without shutdown." logState >>=
-                     Log.log "---" >>
-                     return 1
-            _ ->
-              MessageHandler.handler maybeState logState message >>= \(nextState, nextLogState, maybeResponseByteString) ->
-                Log.flush nextLogState >>=
-                (\flushedLogState ->
-                   case maybeResponseByteString of
-                     Nothing -> return flushedLogState
-                     Just response ->
-                       BS.putStr response >>
-                       Log.log
-                         ("Sending " <> Misc.byteStringToText response)
-                         flushedLogState) >>=
-                loop False nextState
+          MessageHandler.handler model message >>= \msg ->
+            let (nextModel, response, termination) = U.update msg model
+                responseIO =
+                  case response of
+                    U.None ->
+                      return ()
+
+                    U.Send byteString ->
+                      BS.putStr byteString
+            in
+              case termination of
+                U.ShouldTerminate ->
+                  return 1
+
+                U.ShouldNotTerminate ->
+                  responseIO >> loop nextModel

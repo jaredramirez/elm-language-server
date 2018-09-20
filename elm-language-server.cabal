@@ -140,7 +140,6 @@ executable elm-language-server-exe
       LSP.Data.Range
       LSP.Data.Registration
       LSP.Data.RequestMethod
-      LSP.Data.State
       LSP.Data.TextDocumentIdentifier
       LSP.Data.Unregistration
       LSP.Data.URI
@@ -149,7 +148,6 @@ executable elm-language-server-exe
       LSP.MessageHandler.Misc
       LSP.MessageHandler.NotificationTextDocumentDidOpen
       LSP.MessageHandler.RequestInitialize
-      LSP.MessageHandler.RequestTextDocumentHover
       LSP.Server
       Misc
 

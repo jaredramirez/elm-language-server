@@ -3,54 +3,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSP.MessageHandler.Misc
-  ( HandlerResult
-  , makeNotificationError
-  , makeRequestError
-  , findElmExectuable
+  ( findElmExectuable
   ) where
 
 import           Control.Exception        (SomeException, catch)
-import qualified Data.ByteString.Lazy     as BS
 import qualified Data.List                as List
 import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
-import           LSP.Data.Error           (Error)
-import           LSP.Data.OutgoingError   (OutgoingError)
-import qualified LSP.Data.OutgoingError   as OutgoingError
-import           LSP.Data.OutgoingMessage (OutgoingMessage)
-import qualified LSP.Data.OutgoingMessage as OutgoingMessage
-import           LSP.Data.State           (State)
-import qualified LSP.Data.State           as State
-import           LSP.Log                  (LogState)
-import qualified LSP.Log                  as Log
 import           Misc                     ((<|), (|>))
 import qualified System.Directory         as Dir
 
-type HandlerResult = (Maybe State, LogState, Maybe BS.ByteString)
-
--- ERRORS --
-makeNotificationError ::
-     Maybe State -> LogState -> Error -> Text -> HandlerResult
-makeNotificationError maybeState logState error text =
-  let outgoingError = OutgoingError.ResponseError (error, text)
-      outgoingMessage :: OutgoingMessage ()
-      outgoingMessage =
-        OutgoingMessage.ResponseMessage (Nothing, Nothing, Just outgoingError)
-  in ( maybeState
-     , Log.logDeferred text logState
-     , Just (OutgoingMessage.encode outgoingMessage))
-
-makeRequestError ::
-     Maybe State -> LogState -> Text -> Error -> Text -> HandlerResult
-makeRequestError maybeState logState id error text =
-  let outgoingError = OutgoingError.ResponseError (error, text)
-      outgoingMessage :: OutgoingMessage ()
-      outgoingMessage =
-        OutgoingMessage.ResponseMessage (Just id, Nothing, Just outgoingError)
-  in ( maybeState
-     , Log.logDeferred text logState
-     , Just (OutgoingMessage.encode outgoingMessage))
 
 -- ELM EXECTUABLE SEARCH --
 findElmExectuable :: FilePath -> IO (Either Text FilePath)
