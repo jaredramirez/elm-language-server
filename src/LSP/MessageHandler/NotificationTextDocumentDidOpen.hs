@@ -15,7 +15,6 @@ import qualified Data.Text                   as Text
 import qualified LSP.Data.Error              as Error
 import           LSP.Data.NotificationMethod (TextDocumentDidOpenParams)
 import qualified LSP.Data.NotificationMethod as NotificationMethod
-import qualified LSP.Data.OutgoingMessage    as OutgoingMessage
 import qualified LSP.MessageHandler.Misc     as Misc
 import           Misc                        ((<|), (|>))
 import qualified System.Directory            as Dir

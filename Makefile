@@ -3,8 +3,8 @@
 build:
 	cabal build
 
-run:
-	build && ./dist/build/elm-language-server-exe/elm-language-server-exe
+run: build
+	./dist/build/elm-language-server-exe/elm-language-server-exe
 
 copy-exe:
 	rm ~/.local/bin/elm-language-server-exe && cp ./dist/build/elm-language-server-exe/elm-language-server-exe ~/.local/bin/elm-language-server-exe

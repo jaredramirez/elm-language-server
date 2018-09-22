@@ -6,20 +6,20 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import qualified Data.ByteString.Lazy     as BS
-import           Data.HashMap.Strict      (HashMap)
-import qualified Data.HashMap.Strict      as HM
-import           Data.Text                (Text)
-import qualified LSP.Data.Capabilities    as Capabilities
-import           LSP.Data.Error           (Error)
-import           LSP.Data.OutgoingError   (OutgoingError)
-import qualified LSP.Data.OutgoingError   as OutgoingError
-import           LSP.Data.OutgoingMessage (OutgoingMessage)
-import qualified LSP.Data.OutgoingMessage as OutgoingMessage
-import           LSP.Model                (Model)
-import qualified LSP.Model                as M
-import           Misc                     ((<|), (|>))
-import           Prelude                  hiding (init)
+import qualified Data.ByteString.Lazy  as BS
+import           Data.HashMap.Strict   (HashMap)
+import qualified Data.HashMap.Strict   as HM
+import           Data.Text             (Text)
+import qualified LSP.Data.Capabilities as Capabilities
+import           LSP.Data.Error        (Error)
+import           LSP.Data.Message      (Message)
+import qualified LSP.Data.Message      as Message
+import           LSP.Data.MessageError (MessageError)
+import qualified LSP.Data.MessageError as MessageError
+import           LSP.Model             (Model)
+import qualified LSP.Model             as M
+import           Misc                  ((<|), (|>))
+import           Prelude               hiding (init)
 
 init :: Model
 init = M.Model False False Nothing HM.empty
@@ -27,10 +27,12 @@ init = M.Model False False Nothing HM.empty
 data Response
   = Send BS.ByteString
   | None
+  deriving (Show)
 
 data ShouldTermiate
   = ShouldTerminate
   | ShouldNotTerminate
+  deriving (Show)
 
 data Msg
   = Initialize Text Text Text
@@ -40,6 +42,7 @@ data Msg
   | SendRequestError Text Error Text
   | SendNotifError Error Text
   | NoOp
+  deriving (Show)
 
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
@@ -50,12 +53,11 @@ update msg model =
           , M._projectMeta = Just (projectRoot, executable)
           }
       , Send
-        (OutgoingMessage.encode
-          (OutgoingMessage.ResponseMessage
-              ( Just id
-              , Just Capabilities.capabilities
-              , Nothing
-              )
+        (Message.encode
+          (Message.ResponseMessage
+              (Just id)
+              (Just Capabilities.capabilities)
+              Nothing
           )
         )
       , ShouldNotTerminate
@@ -81,27 +83,25 @@ update msg model =
     Exit ->
       (model, None, ShouldTerminate)
 
-    SendRequestError id error message ->
-      let outgoingError = OutgoingError.ResponseError (error, message)
-          outgoingMessage :: OutgoingMessage ()
-          outgoingMessage =
-            OutgoingMessage.ResponseMessage
-              (Just id, Nothing, Just outgoingError)
+    SendRequestError id error errorMessage ->
+      let messageError = MessageError.MessageError error errorMessage
+          message :: Message ()
+          message =
+            Message.ResponseMessage (Just id) Nothing (Just messageError)
       in
         ( model
-        , Send (OutgoingMessage.encode outgoingMessage)
+        , Send (Message.encode message)
         , ShouldNotTerminate
         )
 
-    SendNotifError error message ->
-      let outgoingError = OutgoingError.ResponseError (error, message)
-          outgoingMessage :: OutgoingMessage ()
-          outgoingMessage =
-            OutgoingMessage.ResponseMessage
-              (Nothing, Nothing, Just outgoingError)
+    SendNotifError error errorMessage ->
+      let messageError = MessageError.MessageError error errorMessage
+          message :: Message ()
+          message =
+            Message.ResponseMessage Nothing Nothing (Just messageError)
       in
         ( model
-        , Send (OutgoingMessage.encode outgoingMessage)
+        , Send (Message.encode message)
         , ShouldNotTerminate
         )
 

@@ -129,12 +129,11 @@ executable elm-language-server-exe
       LSP.Data.DocumentSelector
       LSP.Data.Error
       LSP.Data.Header
-      LSP.Data.IncomingMessage
       LSP.Data.Location
       LSP.Data.Method
+      LSP.Data.Message
+      LSP.Data.MessageError
       LSP.Data.NotificationMethod
-      LSP.Data.OutgoingError
-      LSP.Data.OutgoingMessage
       LSP.Data.Params
       LSP.Data.Position
       LSP.Data.Range

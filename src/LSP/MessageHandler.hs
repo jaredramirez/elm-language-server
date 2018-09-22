@@ -11,8 +11,8 @@ import           Data.Semigroup                                     ((<>))
 import           Data.Text                                          (Text)
 import qualified Data.Text                                          as Text
 import qualified LSP.Data.Error                                     as Error
-import           LSP.Data.IncomingMessage                           (IncomingMessage)
-import qualified LSP.Data.IncomingMessage                           as IncomingMessage
+import           LSP.Data.Message                                   (Message)
+import qualified LSP.Data.Message                                   as Message
 import qualified LSP.Data.NotificationMethod                        as NotificationMethod
 import qualified LSP.Data.RequestMethod                             as RequestMethod
 import qualified LSP.MessageHandler.NotificationTextDocumentDidOpen as NotifTextDocumentDidOpen
@@ -23,22 +23,26 @@ import           LSP.Update                                         (Msg)
 import qualified LSP.Update                                         as U
 import           Misc                                               ((<|), (|>))
 
-handler :: Model -> IncomingMessage -> IO Msg
+handler :: Model -> Message result -> IO Msg
 handler model incomingMessage =
   case (M._initialized model, incomingMessage) of
-    (False, IncomingMessage.RequestMessage id (RequestMethod.Initialize paramsJson)) ->
+    (False, Message.RequestMessage id (RequestMethod.Initialize paramsJson)) ->
       RequestInitialize.handler id paramsJson
-
-    (True, IncomingMessage.RequestMessage _ RequestMethod.Shutdown) ->
-      U.RequestShutDown
-        |> return
-
-    (True, IncomingMessage.NotificationMessage NotificationMethod.Exit) ->
-      U.Exit
-        |> return
 
     (False, _) ->
       U.SendNotifError Error.ServerNotInitialized "Server Not Initialized"
+        |> return
+
+    (True, Message.NotificationMessage NotificationMethod.Initialized) ->
+      U.NoOp
+        |> return
+
+    (True, Message.RequestMessage _ RequestMethod.Shutdown) ->
+      U.RequestShutDown
+        |> return
+
+    (True, Message.NotificationMessage NotificationMethod.Exit) ->
+      U.Exit
         |> return
 
     (True, _) ->

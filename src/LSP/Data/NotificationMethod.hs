@@ -4,8 +4,7 @@ module LSP.Data.NotificationMethod
   ( NotificationMethod(..)
   , TextDocumentDidOpenParams(..)
   ) where
-
-import           Data.Aeson           (FromJSON, Value, (.:))
+import           Data.Aeson           (ToJSON, FromJSON, Value, (.:))
 import qualified Data.Aeson           as A
 import           Data.Aeson.Types     (Parser)
 import qualified Data.ByteString.Lazy as BS
@@ -55,3 +54,15 @@ decoder v key
 instance FromJSON NotificationMethod where
   parseJSON =
     A.withObject "NotificationMethod" <| \v -> v .: "method" >>= decoder v
+
+instance ToJSON NotificationMethod where
+  toJSON message =
+    case message of
+      Initialized ->
+        A.toJSON initialized
+
+      TextDocumentDidOpen _ ->
+        A.toJSON textDocumentDidOpen
+
+      Exit ->
+        A.toJSON exit

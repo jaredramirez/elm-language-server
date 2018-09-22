@@ -6,7 +6,7 @@ module LSP.Data.RequestMethod
   , RequestMethod(..)
   ) where
 
-import           Data.Aeson                      (FromJSON, Value, (.:))
+import           Data.Aeson                      (ToJSON, FromJSON, Value, (.:))
 import qualified Data.Aeson                      as A
 import           Data.Aeson.Types                (Parser)
 import qualified Data.ByteString.Lazy            as BS
@@ -60,3 +60,15 @@ decoder v key
 
 instance FromJSON RequestMethod where
   parseJSON = A.withObject "RequestMethod" <| \v -> v .: "method" >>= decoder v
+
+instance ToJSON RequestMethod where
+  toJSON message =
+    case message of
+      Initialize _ ->
+        A.toJSON initialize
+
+      TextDocumentHover _ ->
+        A.toJSON textDocumentHover
+
+      Shutdown ->
+        A.toJSON shutdown

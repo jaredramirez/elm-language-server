@@ -9,7 +9,7 @@ import qualified Data.ByteString.Lazy        as BS
 import qualified Data.Map.Strict             as Map
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as Text
-import qualified LSP.Data.IncomingMessage    as IncomingMessage
+import qualified LSP.Data.Message            as Message
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import           LSP.Model                   (Model)
@@ -34,25 +34,38 @@ run = do
 
 loop :: Model -> IO Int
 loop model =
-  IncomingMessage.decode IO.stdin >>= \decoded ->
+  Message.decode IO.stdin >>= \decoded ->
     case decoded of
       Left error ->
         loop model
 
       Right message ->
-          MessageHandler.handler model message >>= \msg ->
-            let (nextModel, response, termination) = U.update msg model
-                responseIO =
-                  case response of
-                    U.None ->
-                      return ()
+        logger ("Got Message: " ++ show decoded) >>
+        MessageHandler.handler model message >>= \msg ->
+          let (nextModel, response, termination) = U.update msg model
+              responseIO =
+                case response of
+                  U.None ->
+                    return ()
 
-                    U.Send byteString ->
-                      BS.putStr byteString
-            in
-              case termination of
-                U.ShouldTerminate ->
-                  return 1
+                  U.Send byteString ->
+                    BS.putStr byteString
+          in
+            logger ("Next Model: " ++ show nextModel) >>
+              logger ("Response: " ++ show response) >>
+                logger ("Should Terminate: " ++ show termination) >>
+                  case termination of
+                    U.ShouldTerminate ->
+                      return 1
 
-                U.ShouldNotTerminate ->
-                  responseIO >> loop nextModel
+                    U.ShouldNotTerminate ->
+                      responseIO >> loop nextModel
+
+logger ::  Show a => a -> IO ()
+logger  message =
+  let dirPath = "/Users/jaredramirez/dev/src/github.com/jaredramirez/elm-field"
+      dirPathModified = Text.append dirPath "/elm-stuff/.lsp"
+      filePath = Text.append dirPathModified "/debug.log"
+  in Dir.createDirectoryIfMissing True (Text.unpack dirPathModified) >>
+     IO.openFile (Text.unpack filePath) IO.AppendMode >>= \handle ->
+     IO.hPrint handle message >> IO.hClose handle
