@@ -14,6 +14,7 @@ import qualified Data.HashMap.Strict             as HM
 import           Data.Text                       (Text)
 import           LSP.Data.Position               (Position)
 import           LSP.Data.TextDocumentIdentifier (TextDocumentIdentifier)
+import           LSP.Data.URI                    (URI)
 import           Misc                            ((<|))
 
 -- INITIALIZE --
@@ -21,7 +22,7 @@ initialize :: Text
 initialize = "initialize"
 
 newtype InitializeParams =
-  InitializeParams Text
+  InitializeParams URI
   deriving (Show)
 
 instance FromJSON InitializeParams where

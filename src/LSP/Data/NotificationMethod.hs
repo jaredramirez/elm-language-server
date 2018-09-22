@@ -10,6 +10,7 @@ import           Data.Aeson.Types     (Parser)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashMap.Strict  as HM
 import           Data.Text            (Text)
+import           LSP.Data.URI         (URI)
 import           Misc                 ((<|))
 import qualified Misc
 
@@ -22,7 +23,7 @@ textDocumentDidOpen :: Text
 textDocumentDidOpen = "textDocument/didOpen"
 
 newtype TextDocumentDidOpenParams =
-  TextDocumentDidOpenParams (Text, Int, Text)
+  TextDocumentDidOpenParams (URI, Int, Text)
   deriving (Show)
 
 instance FromJSON TextDocumentDidOpenParams where

@@ -158,7 +158,6 @@ executable elm-language-server-exe
     , containers >=0.5.8.2 && <0.6
     , directory >=1.2.3.0 && <2.0
     , filepath >=1 && <2.0
-    , hashable
     , text >=1 && <2
     , unordered-containers
     , utf8-string

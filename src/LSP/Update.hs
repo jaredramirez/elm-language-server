@@ -16,6 +16,8 @@ import           LSP.Data.Message      (Message)
 import qualified LSP.Data.Message      as Message
 import           LSP.Data.MessageError (MessageError)
 import qualified LSP.Data.MessageError as MessageError
+import           LSP.Data.URI          (URI)
+import qualified LSP.Data.URI          as URI
 import           LSP.Model             (Model)
 import qualified LSP.Model             as M
 import           Misc                  ((<|), (|>))
@@ -36,7 +38,7 @@ data ShouldTermiate
 
 data Msg
   = Initialize Text Text Text
-  | SetDocument Text M.Document
+  | SetDocument URI M.Document
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text

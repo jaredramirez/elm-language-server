@@ -1,28 +1,22 @@
 module LSP.Model
   ( Model(..)
   , Document(..)
-  , DocumentText(..)
   ) where
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
+import LSP.Data.URI (URI)
 import Prelude hiding (init)
-
-type UriKey = Text
 
 data Model = Model
   { _shouldTerminate :: Bool
   , _initialized :: Bool
   , _projectMeta :: Maybe (Text, Text)
-  , _documents :: HashMap UriKey Document
+  , _documents :: HashMap URI Document
   } deriving (Show)
 
 data Document = Document
-  { _text :: DocumentText
-  , _executableLegacy :: Text
+  { _version :: Int
+  , _text :: Text
   } deriving (Show)
-
-newtype DocumentText =
-  DocumentText (Int, Text)
-  deriving (Show)
