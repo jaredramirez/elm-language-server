@@ -51,15 +51,14 @@ loop model =
                   U.Send byteString ->
                     BS.putStr byteString
           in
-            logger ("Next Model: " ++ show nextModel) >>
-              logger ("Response: " ++ show response) >>
-                logger ("Should Terminate: " ++ show termination) >>
-                  case termination of
-                    U.ShouldTerminate ->
-                      return 1
+            logger ("Response: " ++ show response) >>
+              logger ("Termination: " ++ show termination) >>
+                case termination of
+                  U.ShouldTerminate ->
+                    return 1
 
-                    U.ShouldNotTerminate ->
-                      responseIO >> loop nextModel
+                  U.ShouldNotTerminate ->
+                    responseIO >> loop nextModel
 
 logger ::  Show a => a -> IO ()
 logger  message =

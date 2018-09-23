@@ -9,11 +9,15 @@ module Misc
   , andThen
   , toInt
   , byteStringToText
+  , textToByteString
   ) where
 
 import qualified Data.ByteString.Lazy as BS
 import           Data.Text            (Text)
+import qualified Data.Char            as Char
+import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as TextEncode
+import           Data.Word            (Word8)
 
 (|>) :: a -> (a -> b) -> b
 (|>) = flip ($)
@@ -50,3 +54,12 @@ byteStringToText byteString =
   case TextEncode.decodeUtf8' (BS.toStrict byteString) of
     Left _      -> ""
     Right value -> value
+
+toWord8 :: Text -> [Word8]
+toWord8 = Text.foldr (\c acc -> fromIntegral (Char.ord c) : acc) []
+
+textToByteString :: Text -> BS.ByteString
+textToByteString text =
+  text
+    |> toWord8
+    |> BS.pack

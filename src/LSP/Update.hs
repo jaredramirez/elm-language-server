@@ -38,7 +38,7 @@ data ShouldTermiate
 
 data Msg
   = Initialize Text Text Text
-  | SetDocument URI M.Document
+  | DidOpen URI M.Document
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
@@ -65,7 +65,7 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    SetDocument uri document ->
+    DidOpen uri document ->
       ( model
           { M._documents =
               model

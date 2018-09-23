@@ -2,7 +2,6 @@
 
 module LSP.Data.Range
   ( Range(..)
-  , decode
   ) where
 
 import           Data.Aeson           (FromJSON, ToJSON, Value, (.:), (.=))
@@ -12,6 +11,7 @@ import           LSP.Data.Position    (Position)
 
 newtype Range =
   Range (Position, Position)
+  deriving (Show)
 
 instance FromJSON Range where
   parseJSON =
@@ -22,6 +22,3 @@ decode = A.eitherDecode'
 
 instance ToJSON Range where
   toJSON (Range (start, end)) = A.object ["start" .= start, "end" .= end]
-
-encode :: Range -> BS.ByteString
-encode = A.encode

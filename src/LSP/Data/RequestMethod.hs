@@ -6,7 +6,7 @@ module LSP.Data.RequestMethod
   , RequestMethod(..)
   ) where
 
-import           Data.Aeson                      (ToJSON, FromJSON, Value, (.:))
+import           Data.Aeson                      (ToJSON, FromJSON, Value, (.:), (.=))
 import qualified Data.Aeson                      as A
 import           Data.Aeson.Types                (Parser)
 import qualified Data.ByteString.Lazy            as BS
@@ -48,8 +48,8 @@ shutdown = "shutdown"
 
 -- METHODS --
 data RequestMethod
-  = Initialize Value
-  | TextDocumentHover Value
+  = Initialize InitializeParams
+  | TextDocumentHover TextDocumentHoverParams
   | Shutdown
   deriving (Show)
 
@@ -66,10 +66,10 @@ instance ToJSON RequestMethod where
   toJSON message =
     case message of
       Initialize _ ->
-        A.toJSON initialize
+        A.object [ "method" .= initialize ]
 
       TextDocumentHover _ ->
-        A.toJSON textDocumentHover
+        A.object [ "method" .= textDocumentHover ]
 
       Shutdown ->
-        A.toJSON shutdown
+        A.object [ "method" .= shutdown ]

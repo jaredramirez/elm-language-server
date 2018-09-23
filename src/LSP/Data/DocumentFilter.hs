@@ -8,8 +8,6 @@ import           Data.Aeson           (FromJSON, ToJSON, Value, (.:?))
 import qualified Data.Aeson           as A
 import qualified Data.ByteString.Lazy as BS
 import           Data.Text            (Text)
-import           LSP.Data.Method      (Method)
-import qualified LSP.Data.Method      as M
 import qualified Misc
 
 newtype DocumentFilter =

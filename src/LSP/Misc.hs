@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.MessageHandler.Misc
+module LSP.Misc
   ( findElmExectuable
   ) where
 

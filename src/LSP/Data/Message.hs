@@ -22,7 +22,6 @@ import qualified Data.Text                   as T
 import qualified LSP.Data.Header             as Header
 import           LSP.Data.MessageError       (MessageError)
 import           LSP.Data.NotificationMethod (NotificationMethod)
-import           LSP.Data.Params             (Params)
 import           LSP.Data.RequestMethod      (RequestMethod)
 import           Misc                        ((<|), (|>))
 import qualified Misc

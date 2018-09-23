@@ -122,30 +122,27 @@ executable elm-language-server-exe
   other-modules:
       Paths_elm_language_server
       Analyze.Hover
-      LSP.Model
-      LSP.Update
       LSP.Data.Capabilities
+      LSP.Data.Diagnostic
       LSP.Data.DocumentFilter
       LSP.Data.DocumentSelector
       LSP.Data.Error
       LSP.Data.Header
       LSP.Data.Location
-      LSP.Data.Method
       LSP.Data.Message
       LSP.Data.MessageError
       LSP.Data.NotificationMethod
-      LSP.Data.Params
       LSP.Data.Position
       LSP.Data.Range
-      LSP.Data.Registration
       LSP.Data.RequestMethod
       LSP.Data.TextDocumentIdentifier
-      LSP.Data.Unregistration
       LSP.Data.URI
-      LSP.Log
+      LSP.Diagnostics
       LSP.MessageHandler
-      LSP.MessageHandler.Misc
+      LSP.Misc
+      LSP.Model
       LSP.Server
+      LSP.Update
       Misc
 
   build-depends:
@@ -159,6 +156,7 @@ executable elm-language-server-exe
     , directory >=1.2.3.0 && <2.0
     , filepath >=1 && <2.0
     , hashable
+    , process
     , text >=1 && <2
     , unordered-containers
     , utf8-string

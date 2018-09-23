@@ -7,26 +7,21 @@ module LSP.Data.Header
   ) where
 
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.Char            as Char
 import           Data.Int             (Int64)
 import           Data.Semigroup       ((<>))
 import           Data.Text            (Text)
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as TextEncode
 import qualified Data.Text.Read       as TextRead
-import           Data.Word            (Word8)
 import           Misc                 ((<|), (|>))
 import qualified Misc
 import           System.Info          as SysInfo
 
-toWord8 :: Text -> [Word8]
-toWord8 = Text.foldr (\c acc -> fromIntegral (Char.ord c) : acc) []
-
 intToByteString :: Int64 -> BS.ByteString
-intToByteString int_ = int_ |> show |> Text.pack |> toWord8 |> BS.pack
+intToByteString int_ = int_ |> show |> Text.pack |> Misc.textToByteString
 
 contentLengthHeader :: BS.ByteString
-contentLengthHeader = "Content-Length: " |> toWord8 |> BS.pack
+contentLengthHeader = Misc.textToByteString "Content-Length: "
 
 contentLengthHeaderLength :: Int64
 contentLengthHeaderLength = BS.length contentLengthHeader
@@ -37,7 +32,7 @@ incomingEndLine =
         if SysInfo.os == "mingw32"
           then "\r\n"
           else "\r"
-  in end |> toWord8 |> BS.pack
+  in Misc.textToByteString end
 
 decodeEndLine :: BS.ByteString -> Either String ()
 decodeEndLine string =
@@ -70,7 +65,7 @@ outgoingEndLine =
         if SysInfo.os == "mingw32"
           then "\n\n"
           else "\r\n\r\n"
-  in end |> toWord8 |> BS.pack
+  in Misc.textToByteString end
 
 encode :: BS.ByteString -> BS.ByteString
 encode content =
