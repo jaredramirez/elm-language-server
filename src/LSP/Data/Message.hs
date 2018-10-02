@@ -22,7 +22,9 @@ import qualified Data.Text                   as T
 import qualified LSP.Data.Header             as Header
 import           LSP.Data.MessageError       (MessageError)
 import           LSP.Data.NotificationMethod (NotificationMethod)
+import qualified LSP.Data.NotificationMethod as NotificationMethod
 import           LSP.Data.RequestMethod      (RequestMethod)
+import qualified LSP.Data.RequestMethod      as RequestMethod
 import           Misc                        ((<|), (|>))
 import qualified Misc
 import           System.IO                   (Handle)
@@ -134,18 +136,13 @@ encodeError error = ["error" .= error]
 
 encodeRequestMessage :: Text -> RequestMethod -> Value
 encodeRequestMessage id method =
-  A.object
-    [ "id" .= id
-    , encodeJsonrpc
-    , "method" .= method
-    ]
+  let pairs = RequestMethod.toPairs method
+  in A.object ([ "id" .= id , encodeJsonrpc ] ++ pairs)
 
 encodeNotificationMessage :: NotificationMethod -> Value
 encodeNotificationMessage method =
-  A.object
-    [ encodeJsonrpc
-    , "method" .= method
-    ]
+  let pairs = NotificationMethod.toPairs method
+  in A.object (encodeJsonrpc : pairs)
 
 encodeResponseMessage :: ToJSON result => Maybe Text -> Maybe result -> Maybe MessageError -> Value
 encodeResponseMessage maybeId maybeResult maybeError =

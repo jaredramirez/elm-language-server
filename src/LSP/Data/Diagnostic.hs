@@ -4,13 +4,14 @@ module LSP.Data.Diagnostic
   ( Diagnostic(..)
   ) where
 
-import Data.Aeson (ToJSON, FromJSON, Value, (.:), (.=), (.=))
+import Data.Aeson (ToJSON, FromJSON, Value, (.:), (.=), (.=), (.!=), (.:?))
 import qualified Data.Aeson as A
 import Data.Text (Text)
 import LSP.Data.Range (Range)
+import LSP.Data.URI (URI)
 
-data Diagnostic = Diagnostic Range Text
-  deriving (Show)
+data Diagnostic = Diagnostic Range Text Int
+ deriving (Show)
 
 instance FromJSON Diagnostic where
   parseJSON =
@@ -18,11 +19,13 @@ instance FromJSON Diagnostic where
       return Diagnostic
       <*> v .: "range"
       <*> v .: "message"
+      <*> (v .:? "severity" .!= 1)
 
 instance ToJSON Diagnostic where
-  toJSON (Diagnostic range message) =
+  toJSON (Diagnostic range message severity) =
     A.object
       [ "range" .= range
       , "message" .= message
-      , "source" .= ("elm make" :: Text)
+      , "source" .= ("elm" :: Text)
+      , "severity" .= severity
       ]

@@ -11,9 +11,9 @@ import           Control.Exception           ( SomeException
                                              , catch
                                              )
 import qualified Data.ByteString.Lazy        as BS
-import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
+import qualified Data.List                   as List
 import qualified LSP.Data.Error              as Error
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
@@ -46,7 +46,6 @@ handler model incomingMessage =
 
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidOpen params)) ->
       textDocumentDidOpenHandler model params
-        |> return
 
     (True, Message.RequestMessage _ RequestMethod.Shutdown) ->
       U.RequestShutDown
@@ -71,9 +70,10 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
         Right executableValue ->
           return (U.Initialize id projectRoot (Text.pack executableValue))
 
-textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> Msg
+textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
 textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, version, document)) =
     let (URI.URI filePath) = uri
+        documents = M.Document version document
         diagnostics =
           case M._projectMeta model of
             Nothing ->
@@ -81,5 +81,14 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
 
             Just (_projectRoot, exectuable) ->
               Diagnostics.run exectuable filePath
-    in
-    U.DidOpen uri (M.Document version document)
+     in
+     fmap
+       (\elmMakeResult ->
+          case elmMakeResult of
+            Left error ->
+              U.SendNotifError Error.InternalError error
+
+            Right maybeDiagnostic ->
+              U.DidOpen uri (M.Document version document) maybeDiagnostic
+        )
+        diagnostics

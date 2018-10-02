@@ -3,10 +3,12 @@
 module LSP.Data.NotificationMethod
   ( NotificationMethod(..)
   , TextDocumentDidOpenParams(..)
+  , PublishDiagnosticsParams(..)
+  , toPairs
   ) where
 import           Data.Aeson           (ToJSON, FromJSON, Value, (.:), (.=))
 import qualified Data.Aeson           as A
-import           Data.Aeson.Types     (Parser)
+import           Data.Aeson.Types     (Parser, Pair)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashMap.Strict  as HM
 import           Data.Text            (Text)
@@ -82,20 +84,19 @@ instance FromJSON NotificationMethod where
   parseJSON =
     A.withObject "NotificationMethod" <| \v -> v .: "method" >>= decoder v
 
-instance ToJSON NotificationMethod where
-  toJSON message =
-    case message of
-      Initialized ->
-        A.object [ "method" .= initialized ]
+toPairs :: NotificationMethod -> [Pair]
+toPairs message =
+  case message of
+    Initialized ->
+      [ "method" .= initialized ]
 
-      TextDocumentDidOpen _ ->
-        A.object [ "method" .= textDocumentDidOpen ]
+    TextDocumentDidOpen _ ->
+      [ "method" .= textDocumentDidOpen ]
 
-      PublishDiagnostics params ->
-        A.object
-          [ "method" .= textDocumentDidOpen
-          , "params" .= params
-          ]
+    PublishDiagnostics params ->
+      [ "method" .= publishDiagnostics
+      , "params" .= params
+      ]
 
-      Exit ->
-        A.object [ "method" .= exit ]
+    Exit ->
+      [ "method" .= exit ]

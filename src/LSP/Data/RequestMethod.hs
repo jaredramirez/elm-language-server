@@ -4,11 +4,12 @@ module LSP.Data.RequestMethod
   ( InitializeParams(..)
   , TextDocumentHoverParams(..)
   , RequestMethod(..)
+  , toPairs
   ) where
 
 import           Data.Aeson                      (ToJSON, FromJSON, Value, (.:), (.=))
 import qualified Data.Aeson                      as A
-import           Data.Aeson.Types                (Parser)
+import           Data.Aeson.Types                (Parser, Pair)
 import qualified Data.ByteString.Lazy            as BS
 import qualified Data.HashMap.Strict             as HM
 import           Data.Text                       (Text)
@@ -62,14 +63,14 @@ decoder v key
 instance FromJSON RequestMethod where
   parseJSON = A.withObject "RequestMethod" <| \v -> v .: "method" >>= decoder v
 
-instance ToJSON RequestMethod where
-  toJSON message =
-    case message of
-      Initialize _ ->
-        A.object [ "method" .= initialize ]
+toPairs :: RequestMethod -> [Pair]
+toPairs message =
+  case message of
+    Initialize _ ->
+      [ "method" .= initialize ]
 
-      TextDocumentHover _ ->
-        A.object [ "method" .= textDocumentHover ]
+    TextDocumentHover _ ->
+      [ "method" .= textDocumentHover ]
 
-      Shutdown ->
-        A.object [ "method" .= shutdown ]
+    Shutdown ->
+      [ "method" .= shutdown ]

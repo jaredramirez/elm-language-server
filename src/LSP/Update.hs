@@ -6,6 +6,7 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
+import qualified Data.Aeson            as A
 import qualified Data.ByteString.Lazy  as BS
 import           Data.HashMap.Strict   (HashMap)
 import qualified Data.HashMap.Strict   as HM
@@ -14,8 +15,11 @@ import qualified LSP.Data.Capabilities as Capabilities
 import           LSP.Data.Error        (Error)
 import           LSP.Data.Message      (Message)
 import qualified LSP.Data.Message      as Message
+import           LSP.Data.Diagnostic   (Diagnostic)
+import qualified LSP.Data.Diagnostic   as Diagnostic
 import           LSP.Data.MessageError (MessageError)
 import qualified LSP.Data.MessageError as MessageError
+import qualified LSP.Data.NotificationMethod as NotifMethod
 import           LSP.Data.URI          (URI)
 import qualified LSP.Data.URI          as URI
 import           LSP.Model             (Model)
@@ -38,7 +42,7 @@ data ShouldTermiate
 
 data Msg
   = Initialize Text Text Text
-  | DidOpen URI M.Document
+  | DidOpen URI M.Document [Diagnostic]
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
@@ -65,14 +69,22 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    DidOpen uri document ->
+    DidOpen uri document diagnostics ->
       ( model
           { M._documents =
               model
                 |> M._documents
                 |> HM.alter (const (Just document)) uri
           }
-      , None
+      , let encode :: Message () -> BS.ByteString
+            encode = Message.encode
+          in
+          (uri, diagnostics)
+            |> NotifMethod.PublishDiagnosticsParams
+            |> NotifMethod.PublishDiagnostics
+            |> Message.NotificationMessage
+            |> encode
+            |> Send
       , ShouldNotTerminate
       )
 

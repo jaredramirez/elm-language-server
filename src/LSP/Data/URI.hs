@@ -5,6 +5,7 @@ module LSP.Data.URI
   , decodePath
   ) where
 
+import Data.Semigroup ((<>))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (ToJSON, FromJSON, Parser)
 import Data.Text (Text)
@@ -41,7 +42,7 @@ instance FromJSON URI where
 
 instance ToJSON URI where
   toJSON (URI uri) =
-    A.toJSON uri
+    A.toJSON (prefix <> uri)
 
 -- So we can use URI as a key in a HashMap --
 instance H.Hashable URI where
