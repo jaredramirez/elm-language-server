@@ -19,6 +19,7 @@ import qualified Data.Text as Text
 import LSP.Data.Diagnostic (Diagnostic)
 import qualified LSP.Data.Diagnostic as D
 import LSP.Data.Range (Range)
+import qualified LSP.Data.Range as Range
 import Misc ((<|), (|>))
 import qualified Misc
 import qualified System.IO as IO
@@ -89,7 +90,7 @@ instance FromJSON Problem where
     A.withObject "Diagnostic Problem" $ \v ->
       return Problem
         <*> v .: "title"
-        <*> v .: "region" -- _range
+        <*> v .: "region" -- parse range as "region"
         <*> v .: "message"
 
 -- DIAGNOSTICS ERROR --
@@ -137,8 +138,10 @@ toDiagnostics diagnostics =
           , List.map
             (\(Problem title range message) ->
               D.Diagnostic
-                range
-                (List.foldl (\acc cur -> Text.append acc (messageToText cur)) ""  message)
+                -- LSP protocol uses 0-index line/column numbers and the Elm
+                -- compiler does not. So we decrement each by 1 to get range properly
+                (Range.updatePositions (\l -> l - 1) range)
+                (List.foldl (\acc cur -> Text.append acc (messageToText cur)) " "  message)
                 1
             )
             problems

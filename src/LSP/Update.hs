@@ -42,7 +42,9 @@ data ShouldTermiate
 
 data Msg
   = Initialize Text Text Text
-  | DidOpen URI M.Document [Diagnostic]
+  | UpdateDocument URI M.Document
+  | SendDiagnostics URI [Diagnostic]
+  | UpdateDocumentAndSendDiagnostics URI M.Document [Diagnostic]
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
@@ -69,7 +71,32 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    DidOpen uri document diagnostics ->
+    UpdateDocument uri document ->
+      ( model
+          { M._documents =
+              model
+                |> M._documents
+                |> HM.alter (const (Just document)) uri
+          }
+      , None
+      , ShouldNotTerminate
+      )
+
+    SendDiagnostics uri diagnostics ->
+      ( model
+      , let encode :: Message () -> BS.ByteString
+            encode = Message.encode
+          in
+          (uri, diagnostics)
+            |> NotifMethod.PublishDiagnosticsParams
+            |> NotifMethod.PublishDiagnostics
+            |> Message.NotificationMessage
+            |> encode
+            |> Send
+      , ShouldNotTerminate
+      )
+
+    UpdateDocumentAndSendDiagnostics uri document diagnostics ->
       ( model
           { M._documents =
               model

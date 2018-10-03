@@ -14,10 +14,14 @@ import qualified Data.ByteString.Lazy        as BS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
+import qualified Data.Maybe                  as Maybe
 import qualified LSP.Data.Error              as Error
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
-import           LSP.Data.NotificationMethod (TextDocumentDidOpenParams)
+import           LSP.Data.NotificationMethod ( TextDocumentDidOpenParams
+                                             , TextDocumentDidChangeParams
+                                             , TextDocumentDidSaveParams
+                                             )
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
@@ -47,6 +51,13 @@ handler model incomingMessage =
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidOpen params)) ->
       textDocumentDidOpenHandler model params
 
+    (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidChange params)) ->
+      textDocumentDidChangeHandler model params
+        |> return
+
+    (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidSave params)) ->
+      textDocumentDidSaveHandler model params
+
     (True, Message.RequestMessage _ RequestMethod.Shutdown) ->
       U.RequestShutDown
         |> return
@@ -73,7 +84,6 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
 textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
 textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, version, document)) =
     let (URI.URI filePath) = uri
-        documents = M.Document version document
         diagnostics =
           case M._projectMeta model of
             Nothing ->
@@ -88,7 +98,45 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
             Left error ->
               U.SendNotifError Error.InternalError error
 
-            Right maybeDiagnostic ->
-              U.DidOpen uri (M.Document version document) maybeDiagnostic
+            Right diagnostics ->
+              U.UpdateDocumentAndSendDiagnostics uri (M.Document version document) diagnostics
+        )
+        diagnostics
+
+textDocumentDidChangeHandler:: Model -> TextDocumentDidChangeParams -> Msg
+textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangeParams (uri, version, contentChanges)) =
+    let (URI.URI filePath) = uri
+        maybeDocument =
+          contentChanges
+            |> List.reverse
+            |> Maybe.listToMaybe
+            |> fmap (\(NotificationMethod.ContentChange text) -> text)
+    in
+    case maybeDocument of
+      Nothing ->
+        U.SendNotifError Error.InvalidParams "No document changes received"
+
+      Just document ->
+        U.UpdateDocument uri (M.Document version document)
+
+textDocumentDidSaveHandler:: Model -> TextDocumentDidSaveParams -> IO Msg
+textDocumentDidSaveHandler model (NotificationMethod.TextDocumentDidSaveParams uri) =
+    let (URI.URI filePath) = uri
+        diagnostics =
+          case M._projectMeta model of
+            Nothing ->
+              return (Left "Elm exectuable not found")
+
+            Just (_projectRoot, exectuable) ->
+              Diagnostics.run exectuable filePath
+     in
+     fmap
+       (\elmMakeResult ->
+          case elmMakeResult of
+            Left error ->
+              U.SendNotifError Error.InternalError error
+
+            Right diagnostics ->
+              U.SendDiagnostics uri diagnostics
         )
         diagnostics

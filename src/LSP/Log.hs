@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSP.Log
-  ( LogState
+  ( logger
+  , LogState
   , init
   , setDirPath
   , log
@@ -16,6 +17,15 @@ import           Prelude          hiding (init, log)
 import qualified System.Directory as Dir
 import           System.IO        (Handle)
 import qualified System.IO        as IO
+
+logger ::  Show a => a -> IO ()
+logger  message =
+  let dirPath = "/Users/jaredramirez/dev/src/github.com/jaredramirez/elm-field"
+      dirPathModified = Text.append dirPath "/elm-stuff/.lsp"
+      filePath = Text.append dirPathModified "/debug.log"
+  in Dir.createDirectoryIfMissing True (Text.unpack dirPathModified) >>
+     IO.openFile (Text.unpack filePath) IO.AppendMode >>= \handle ->
+     IO.hPrint handle message >> IO.hClose handle
 
 newtype LogState =
   LogState (Maybe Text, [Text])
