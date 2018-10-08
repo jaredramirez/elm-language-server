@@ -13,6 +13,8 @@ import qualified Data.HashMap.Strict   as HM
 import           Data.Text             (Text)
 import qualified LSP.Data.Capabilities as Capabilities
 import           LSP.Data.Error        (Error)
+import           LSP.Data.ElmConfig    (ElmConfig)
+import qualified LSP.Data.ElmConfig    as ElmConfig
 import           LSP.Data.Message      (Message)
 import qualified LSP.Data.Message      as Message
 import           LSP.Data.Diagnostic   (Diagnostic)
@@ -28,7 +30,7 @@ import           Misc                  ((<|), (|>))
 import           Prelude               hiding (init)
 
 init :: Model
-init = M.Model False False Nothing HM.empty
+init = M.Model False False Nothing HM.empty HM.empty
 
 data Response
   = Send BS.ByteString
@@ -41,7 +43,7 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text
+  = Initialize Text Text Text ElmConfig [Text] Text
   | UpdateDocument URI M.Document
   | SendDiagnostics URI [Diagnostic]
   | UpdateDocumentAndSendDiagnostics URI M.Document [Diagnostic]
@@ -55,10 +57,24 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot executable ->
+    Initialize id projectRoot executable config localModules hiddenBuildPath ->
       ( model
           { M._initialized = True
           , M._projectMeta = Just (projectRoot, executable)
+          , M._projects =
+              model
+                |> M._projects
+                |> HM.alter
+                    (M.Package
+                      projectRoot
+                      executable
+                      config
+                      localModules
+                      hiddenBuildPath
+                    |> Just
+                    |> const
+                    )
+                    (URI.URI projectRoot)
           }
       , Send
         (Message.encode

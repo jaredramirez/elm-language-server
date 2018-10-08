@@ -15,6 +15,8 @@ import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
 import qualified Data.Maybe                  as Maybe
+import           LSP.Data.ElmConfig          (ElmConfig)
+import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.Error              as Error
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
@@ -73,13 +75,32 @@ handler model incomingMessage =
 requestInitializeHandler:: Text -> InitializeParams -> IO Msg
 requestInitializeHandler id (RequestMethod.InitializeParams uri) =
     let (URI.URI projectRoot) = uri
-        exectuable = Misc.findElmExectuable (Text.unpack projectRoot)
+
+        projectRootString = Text.unpack projectRoot
+
+        exectuable = Misc.findElmExectuable projectRootString
+
+        elmConfig = ElmConfig.parseFromFile (projectRootString ++ "/elm.json")
+
     in exectuable >>= \case
         Left error ->
           return (U.SendRequestError id Error.InternalError error)
 
         Right executableValue ->
-          return (U.Initialize id projectRoot (Text.pack executableValue))
+          elmConfig >>= \case
+            Left error ->
+              return (U.SendRequestError id Error.InternalError (Text.pack error))
+
+            Right elmConfig ->
+              return
+                (U.Initialize
+                  id
+                  projectRoot
+                  (Text.pack executableValue)
+                  elmConfig
+                  []
+                  ""
+                )
 
 textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
 textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, version, document)) =

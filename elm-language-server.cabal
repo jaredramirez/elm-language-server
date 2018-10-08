@@ -127,6 +127,7 @@ executable elm-language-server-exe
       LSP.Data.DocumentFilter
       LSP.Data.DocumentSelector
       LSP.Data.Error
+      LSP.Data.ElmConfig
       LSP.Data.Header
       LSP.Data.Location
       LSP.Data.Message
