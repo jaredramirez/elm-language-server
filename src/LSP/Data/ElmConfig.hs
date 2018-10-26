@@ -5,6 +5,7 @@ module LSP.Data.ElmConfig
     , parseFromFile
     ) where
 
+import Data.Semigroup ((<>))
 import Data.Aeson (FromJSON, Value, (.:), (.:?))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
@@ -32,34 +33,33 @@ data ElmConfig
     , pkgVersion :: Text
     , pkgExposedModules :: [Text]
     , pkgElmVersion :: Text
-    , pkgDirectDependencies :: Maybe (HashMap Text Text)
-    , pkgIndirectDependencies :: Maybe (HashMap Text Text)
-    , pkgDirectTestDependencies :: Maybe (HashMap Text Text)
-    , pkgIndirectTestDependencies :: Maybe (HashMap Text Text)
+    , pkgDependencies :: Maybe (HashMap Text Text)
+    , pkgTestDependencies :: Maybe (HashMap Text Text)
     }
     deriving (Show)
 
-parseDependencies :: HashMap Text Value -> Parser (Maybe (HashMap Text Text), Maybe (HashMap Text Text))
-parseDependencies v =
-  let dependencies = HM.lookup "dependencies" v
+data DependencyType
+  = Dependencies
+  | TestDependencies
+
+dependencyTypeToText :: DependencyType -> Text
+dependencyTypeToText dependencyType =
+  case dependencyType of
+    Dependencies ->
+      "dependencies"
+
+    TestDependencies ->
+      "test-dependencies"
+
+
+parseDependencies :: DependencyType -> HashMap Text Value -> Parser (Maybe (HashMap Text Text), Maybe (HashMap Text Text))
+parseDependencies dependencyType v =
+  let key = dependencyTypeToText dependencyType
+      dependencies = HM.lookup key v
   in
   case dependencies of
     Nothing ->
-      fail "Failed to find \"dependencies\" object"
-
-    Just depMap ->
-      return (,)
-        <*> v .: "direct"
-        <*> v .: "indirect"
-
-
-parseTestDependencies :: HashMap Text Value -> Parser (Maybe (HashMap Text Text), Maybe (HashMap Text Text))
-parseTestDependencies v =
-  let dependencies = HM.lookup "test-dependencies" v
-  in
-  case dependencies of
-    Nothing ->
-      fail "Failed to find \"test-dependencies\" object"
+      return (Nothing, Nothing)
 
     Just depMap ->
       return (,)
@@ -76,24 +76,21 @@ parseApplication v =
     <*> v .: "name"
     <*> v .: "source-directories"
     <*> v .: "elm-version"
-    <*> parseDependencies v
-    <*> parseTestDependencies v
+    <*> parseDependencies Dependencies v
+    <*> parseDependencies TestDependencies v
 
 
 parsePackage :: HashMap Text Value -> Parser ElmConfig
 parsePackage v =
-  let make name summary license version exposedModules elmVersion (directDeps, indirectDeps) (directTestDeps, indirectTestDeps) =
-        Package name summary license version exposedModules elmVersion directDeps indirectDeps directTestDeps indirectTestDeps
-  in
-  return make
+  return Package
     <*> v .: "name"
     <*> v .: "summary"
     <*> v .: "license"
     <*> v .: "version"
     <*> v .: "exposed-modules"
     <*> v .: "elm-version"
-    <*> parseDependencies v
-    <*> parseTestDependencies v
+    <*> v .:? "dependencies"
+    <*> v .:? "testDependencies"
 
 
 instance FromJSON ElmConfig where

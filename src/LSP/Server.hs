@@ -53,6 +53,7 @@ loop model =
           in
             logger ("Response: " ++ show response) >>
               logger ("Termination: " ++ show termination) >>
+              logger ("Model: " ++ show nextModel) >>
                 case termination of
                   U.ShouldTerminate ->
                     return 1

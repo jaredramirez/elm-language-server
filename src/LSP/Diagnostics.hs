@@ -128,6 +128,15 @@ instance FromJSON ElmDiagnostics where
             fail "Invalid diagnostics result"
 
 -- CONVERT TO LSP DATA STRUCTURE
+safeHead :: [item] -> Maybe item
+safeHead list =
+  case list of
+    [] ->
+      Nothing
+
+    h : _ ->
+      Just h
+
 toDiagnostics :: ElmDiagnostics -> [(Text, [Diagnostic])]
 toDiagnostics diagnostics =
   case diagnostics of
@@ -142,6 +151,11 @@ toDiagnostics diagnostics =
                 -- compiler does not. So we decrement each by 1 to get range properly
                 (Range.updatePositions (\l -> l - 1) range)
                 (List.foldl (\acc cur -> Text.append acc (messageToText cur)) " "  message)
+                -- (message
+                  -- |> safeHead
+                  -- |> fmap messageToText
+                  -- |> Maybe.fromMaybe ""
+                -- )
                 1
             )
             problems
