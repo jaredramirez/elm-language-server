@@ -74,7 +74,7 @@ messageToText message =
       text
 
     Meta meta ->
-      _string meta
+      ""
 
 -- DIAGNOSTICS Problem --
 data Problem =
@@ -128,14 +128,25 @@ instance FromJSON ElmDiagnostics where
             fail "Invalid diagnostics result"
 
 -- CONVERT TO LSP DATA STRUCTURE
-safeHead :: [item] -> Maybe item
-safeHead list =
-  case list of
-    [] ->
-      Nothing
+squashConsecutiveChars :: Text -> Text
+squashConsecutiveChars text =
+  text
+    |> Text.unpack
+    |> List.group
+    |> List.foldl
+      (\acc cur ->
+        case cur of
+          h0 : h1 : _ ->
+            if (h0 == ' ' && h1 == ' ') || (h0 == '\n' && h1 == '\n') then
+              Text.append acc (Text.singleton h0)
 
-    h : _ ->
-      Just h
+            else
+              Text.append acc (Text.pack cur)
+
+          _ ->
+            Text.append acc (Text.pack cur)
+      )
+      ""
 
 toDiagnostics :: ElmDiagnostics -> [(Text, [Diagnostic])]
 toDiagnostics diagnostics =
@@ -150,12 +161,16 @@ toDiagnostics diagnostics =
                 -- LSP protocol uses 0-index line/column numbers and the Elm
                 -- compiler does not. So we decrement each by 1 to get range properly
                 (Range.updatePositions (\l -> l - 1) range)
-                (List.foldl (\acc cur -> Text.append acc (messageToText cur)) " "  message)
-                -- (message
-                  -- |> safeHead
-                  -- |> fmap messageToText
-                  -- |> Maybe.fromMaybe ""
-                -- )
+                (List.foldl
+                  (\acc cur ->
+                    cur
+                      |> messageToText
+                      |> squashConsecutiveChars
+                      |> Text.append acc
+                  )
+                  ""
+                  message
+                )
                 1
             )
             problems
