@@ -23,88 +23,6 @@ flag dev {
   default: False
 }
 
-library
-  hs-source-dirs:
-      elm/src
-
-  exposed-modules:
-      Elm.Name
-      Elm.Package
-      Parse.Parse
-      Reporting.Result
-      Reporting.Error
-      Reporting.Error.Syntax
-      Reporting.Region
-      AST.Valid
-      AST.Source
-
-  other-modules:
-      AST.Canonical
-      AST.Module.Name
-      AST.Optimized
-      AST.Utils.Binop
-      AST.Utils.Shader
-      AST.Utils.Type
-      Data.Index
-      Elm.Compiler.Imports
-      Elm.Version
-      Json.Decode
-      Json.Decode.Error
-      Json.Decode.Internals
-      Json.Encode
-      Optimize.DecisionTree
-      Parse.Declaration
-      Parse.Expression
-      Parse.Module
-      Parse.Pattern
-      Parse.Primitives
-      Parse.Primitives.Internals
-      Parse.Primitives.Kernel
-      Parse.Primitives.Keyword
-      Parse.Primitives.Number
-      Parse.Primitives.Shader
-      Parse.Primitives.Symbol
-      Parse.Primitives.Utf8
-      Parse.Primitives.Variable
-      Parse.Primitives.Whitespace
-      Parse.Repl
-      Parse.Shader
-      Parse.Type
-      Reporting.Annotation
-      Reporting.Doc
-      Reporting.Error.Canonicalize
-      Reporting.Error.Docs
-      Reporting.Error.Main
-      Reporting.Error.Pattern
-      Reporting.Error.Type
-      Reporting.Render.Code
-      Reporting.Render.Type
-      Reporting.Render.Type.Localizer
-      Reporting.Report
-      Reporting.Suggest
-      Reporting.Warning
-
-  build-depends:
-      ansi-terminal >=0.8 && <0.9
-    , ansi-wl-pprint >=0.6.8 && <0.7
-    , base >=4.8 && <5
-    , binary >=0.8 && <0.9
-    , bytestring >=0.9 && <0.11
-    , containers >=0.5.8.2 && <0.6
-    , directory >=1.2.3.0 && <2.0
-    , filepath >=1 && <2.0
-    , language-glsl >=0.0.2 && <0.3
-    , edit-distance >=0.2.2.1 && <0.3
-    , parsec
-    , scientific
-    , text >=1 && <2
-    , unordered-containers
-    , utf8-string
-    , vector
-
-  default-language: Haskell2010
-
-
 executable elm-language-server-exe
   if flag(dev)
     ghc-options: -O0 -Wall -Werror
@@ -115,7 +33,6 @@ executable elm-language-server-exe
 
   hs-source-dirs:
       src
-      elm
 
   other-extensions: TemplateHaskell
 
@@ -148,7 +65,6 @@ executable elm-language-server-exe
 
   build-depends:
       base >=4.8 && <5
-    , elm-language-server
     , aeson
     , aeson-utils
     , base >=4.8 && <5
@@ -158,6 +74,7 @@ executable elm-language-server-exe
     , filepath >=1 && <2.0
     , hashable
     , process
+    , Glob
     , text >=1 && <2
     , unordered-containers
     , utf8-string
@@ -179,7 +96,6 @@ test-suite elm-language-server-test
 
   build-depends:
       base >=4.8 && <5
-    , elm-language-server
     , tasty >=1.1.0.3 && <1.2
     , tasty-hunit
     , bytestring >=0.9 && <0.11

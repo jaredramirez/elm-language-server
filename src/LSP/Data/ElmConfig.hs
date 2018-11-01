@@ -3,23 +3,27 @@
 module LSP.Data.ElmConfig
     ( ElmConfig(..)
     , parseFromFile
+    , getElmSourceDirectories
     ) where
 
+import Control.Applicative ((<|>))
 import Data.Semigroup ((<>))
 import Data.Aeson (FromJSON, Value, (.:), (.:?))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.List as List
 import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Misc ((<|), (|>))
+import qualified Misc
 
 data ElmConfig
   = Application
     { appName :: Text
-    , appSourceDirectories :: Text
+    , appSourceDirectories :: [Text]
     , appElmVersion :: Text
     , appDirectDependencies :: Maybe (HashMap Text Text)
     , appIndirectDependencies :: Maybe (HashMap Text Text)
@@ -80,6 +84,23 @@ parseApplication v =
     <*> parseDependencies TestDependencies v
 
 
+parseExposedModules :: HashMap Text Value -> Parser [Text]
+parseExposedModules v =
+  let
+      key =
+        "exposed-modules"
+
+      list :: Parser [Text]
+      list =
+        v .: key
+
+      map :: Parser [Text]
+      map =
+        (v .: key :: Parser (HashMap Text [Text]))
+          |> fmap (List.foldl (++) [] . HM.elems)
+  in list <|> map
+
+
 parsePackage :: HashMap Text Value -> Parser ElmConfig
 parsePackage v =
   return Package
@@ -87,7 +108,7 @@ parsePackage v =
     <*> v .: "summary"
     <*> v .: "license"
     <*> v .: "version"
-    <*> v .: "exposed-modules"
+    <*> parseExposedModules v
     <*> v .: "elm-version"
     <*> v .:? "dependencies"
     <*> v .:? "testDependencies"
@@ -107,7 +128,22 @@ instance FromJSON ElmConfig where
           _ ->
             fail "Invalid elm.json type"
 
-parseFromFile :: FilePath -> IO (Either String ElmConfig)
+getElmSourceDirectories :: ElmConfig -> [Text]
+getElmSourceDirectories config =
+  case config of
+    Application _ appSourceDirs _ _ _ _ _ ->
+      appSourceDirs
+
+    Package _ _ _ _ _ _ _ _ ->
+      []
+
+
+parseFromFile :: FilePath -> IO (Either Text ElmConfig)
 parseFromFile filePath =
   BS.readFile filePath
-    |> fmap A.eitherDecode'
+    |> fmap
+      (\text ->
+        text
+          |> A.eitherDecode'
+          |> Misc.mapLeft T.pack
+      )

@@ -30,7 +30,7 @@ import           Misc                  ((<|), (|>))
 import           Prelude               hiding (init)
 
 init :: Model
-init = M.Model False False Nothing HM.empty HM.empty
+init = M.Model False False Nothing HM.empty
 
 data Response
   = Send BS.ByteString
@@ -43,7 +43,7 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text ElmConfig [Text] Text
+  = Initialize Text Text Text ElmConfig Text
   | UpdateDocument URI M.Document
   | SendDiagnostics URI [Diagnostic]
   | UpdateDocumentAndSendDiagnostics URI M.Document [Diagnostic]
@@ -57,24 +57,16 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot executable config localModules hiddenBuildPath ->
+    Initialize id projectRoot executable config clonedFilePath ->
       ( model
           { M._initialized = True
-          , M._projectMeta = Just (projectRoot, executable)
-          , M._projects =
-              model
-                |> M._projects
-                |> HM.alter
-                    (M.Package
-                      projectRoot
-                      executable
-                      config
-                      localModules
-                      hiddenBuildPath
-                    |> Just
-                    |> const
-                    )
-                    (URI.URI projectRoot)
+          , M._package =
+            Just <|
+              M.Package
+                projectRoot
+                executable
+                config
+                clonedFilePath
           }
       , Send
         (Message.encode
