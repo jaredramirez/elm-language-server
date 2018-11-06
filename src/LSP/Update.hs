@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module LSP.Update
   ( init
   , Msg(..)
@@ -6,34 +8,41 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import qualified Data.Aeson            as A
-import qualified Data.ByteString.Lazy  as BS
-import           Data.HashMap.Strict   (HashMap)
-import qualified Data.HashMap.Strict   as HM
-import           Data.Text             (Text)
-import qualified LSP.Data.Capabilities as Capabilities
-import           LSP.Data.Error        (Error)
-import           LSP.Data.ElmConfig    (ElmConfig)
-import qualified LSP.Data.ElmConfig    as ElmConfig
-import           LSP.Data.Message      (Message)
-import qualified LSP.Data.Message      as Message
-import           LSP.Data.Diagnostic   (Diagnostic)
-import qualified LSP.Data.Diagnostic   as Diagnostic
-import           LSP.Data.MessageError (MessageError)
-import qualified LSP.Data.MessageError as MessageError
+import           Data.Aeson                  ((.=))
+import qualified Data.Aeson                  as A
+import qualified Data.ByteString.Lazy        as BS
+import           Data.HashMap.Strict         (HashMap)
+import qualified Data.HashMap.Strict         as HM
+import           Data.Semigroup              ((<>))
+import           Data.Text                   (Text)
+import qualified LSP.Data.Capabilities       as Capabilities
+import           LSP.Data.Error              (Error)
+import           LSP.Data.ElmConfig          (ElmConfig)
+import qualified LSP.Data.ElmConfig          as ElmConfig
+import qualified LSP.Data.FileChangeType     as FileChangeType
+import qualified LSP.Data.FileSystemWatcher  as FileSystemWatcher
+import           LSP.Data.Message            (Message)
+import qualified LSP.Data.Message            as Message
+import           LSP.Data.Registration       (Registration)
+import qualified LSP.Data.Registration       as Registration
+import           LSP.Data.Diagnostic         (Diagnostic)
+import qualified LSP.Data.Diagnostic         as Diagnostic
+import           LSP.Data.MessageError       (MessageError)
+import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
-import           LSP.Data.URI          (URI)
-import qualified LSP.Data.URI          as URI
-import           LSP.Model             (Model)
-import qualified LSP.Model             as M
-import           Misc                  ((<|), (|>))
-import           Prelude               hiding (init)
+import           LSP.Data.URI                (URI)
+import qualified LSP.Data.URI                as URI
+import           LSP.Model                   (Model)
+import qualified LSP.Model                   as M
+import           Misc                        ((<|), (|>))
+import           Prelude                     hiding (init)
 
 init :: Model
 init = M.Model False False Nothing HM.empty
 
 data Response
   = Send BS.ByteString
+  | SendMany [BS.ByteString]
   | None
   deriving (Show)
 
@@ -44,6 +53,7 @@ data ShouldTermiate
 
 data Msg
   = Initialize Text Text Text ElmConfig Text
+  | UpdateElmConfig ElmConfig
   | UpdateDocument URI M.Document
   | SendDiagnostics URI [Diagnostic]
   | UpdateDocumentAndSendDiagnostics URI M.Document [Diagnostic]
@@ -68,14 +78,36 @@ update msg model =
                 config
                 clonedFilePath
           }
-      , Send
-        (Message.encode
-          (Message.ResponseMessage
-              (Just id)
-              (Just Capabilities.capabilities)
-              Nothing
-          )
-        )
+      , SendMany
+        [ Message.encode
+            (Message.ResponseMessage
+                (Just id)
+                (Just Capabilities.capabilities)
+                Nothing
+            )
+        , [ Registration.DidChangeWatchedFiles
+              "watching"
+              [ FileSystemWatcher.FileSystemWatcher
+                  (projectRoot <> "/" <> M.elmConfigFileName)
+                  (Just FileChangeType.Changed)
+              ]
+          ]
+          |> NotifMethod.RegisterCapabilityParams
+          |> NotifMethod.RegisterCapability
+          |> Message.NotificationMessage
+          |> (Message.encode :: Message () -> BS.ByteString)
+        ]
+      , ShouldNotTerminate
+      )
+
+    UpdateElmConfig elmConfig ->
+      ( model
+          { M._package =
+              model
+                |> M._package
+                |> fmap (\package -> package { M._elmConfig = elmConfig })
+          }
+      , None
       , ShouldNotTerminate
       )
 

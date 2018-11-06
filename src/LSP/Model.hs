@@ -4,6 +4,7 @@ module LSP.Model
   ( Model(..)
   , Package(..)
   , Document(..)
+  , elmConfigFileName
   , makeClonePathRoot
   , filePathToClonedFilePath
   ) where
@@ -42,8 +43,13 @@ data Document = Document
   } deriving (Show)
 
 
+elmConfigFileName :: Text
+elmConfigFileName =
+  "elm.json"
+
 makeClonePathRoot :: Text -> Text
-makeClonePathRoot root = root <> "/elm-stuff/.lsp/clone"
+makeClonePathRoot root =
+  root <> "/elm-stuff/.lsp/clone"
 
 
 filePathToClonedFilePath :: Model -> Text -> Maybe Text

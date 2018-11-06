@@ -20,6 +20,7 @@ import LSP.Data.Diagnostic (Diagnostic)
 import qualified LSP.Data.Diagnostic as D
 import LSP.Data.Range (Range)
 import qualified LSP.Data.Range as Range
+import qualified LSP.Data.Position as Position
 import Misc ((<|), (|>))
 import qualified Misc
 import qualified System.IO as IO
@@ -67,6 +68,15 @@ instance FromJSON MessagePart where
       _ ->
         ATypes.typeMismatch "Diagnostic MessagePart" value
 
+messageToTextThrowAwayMeta :: MessagePart -> Text
+messageToTextThrowAwayMeta message =
+  case message of
+    Str text ->
+      text
+
+    Meta meta ->
+      ""
+
 messageToText :: MessagePart -> Text
 messageToText message =
   case message of
@@ -74,7 +84,7 @@ messageToText message =
       text
 
     Meta meta ->
-      ""
+      _string meta
 
 -- DIAGNOSTICS Problem --
 data Problem =
@@ -113,6 +123,7 @@ instance FromJSON Error where
 -- DIAGNOSTICS RESULT --
 data ElmDiagnostics
   = CompileError [Error]
+  | OtherError Text Text [MessagePart]
   deriving (Show)
 
 instance FromJSON ElmDiagnostics where
@@ -123,6 +134,12 @@ instance FromJSON ElmDiagnostics where
           "compile-errors" ->
             return CompileError
               <*> v .: "errors"
+
+          "error" ->
+            return OtherError
+              <*> v .: "path"
+              <*> v .: "title"
+              <*> v .: "message"
 
           _ ->
             fail "Invalid diagnostics result"
@@ -148,8 +165,8 @@ squashConsecutiveChars text =
       )
       ""
 
-toDiagnostics :: ElmDiagnostics -> [(Text, [Diagnostic])]
-toDiagnostics diagnostics =
+toDiagnostics :: Text -> ElmDiagnostics -> [(Text, [Diagnostic])]
+toDiagnostics filePath diagnostics =
   case diagnostics of
     CompileError errors ->
       List.map
@@ -164,7 +181,7 @@ toDiagnostics diagnostics =
                 (List.foldl
                   (\acc cur ->
                     cur
-                      |> messageToText
+                      |> messageToTextThrowAwayMeta
                       |> squashConsecutiveChars
                       |> Text.append acc
                   )
@@ -178,18 +195,41 @@ toDiagnostics diagnostics =
         )
         errors
 
+    OtherError path title messageParts ->
+      -- If it's OtherError, that means the problem lies in `elm.json` or something
+      -- so we show the issue at the top of whatever file is open
+      [ ( filePath
+        , [ D.Diagnostic
+              (Range.Range (Position.Position (0, 0), Position.Position (0, 6)))
+              (title <> " in " <> path <> ". " <>
+                List.foldl
+                  (\acc cur ->
+                    cur
+                      |> messageToText
+                      |> squashConsecutiveChars
+                      |> Text.append acc
+                  )
+                  ""
+                  messageParts
+              )
+              1
+          ]
+        )
+      ]
+
 -- RUN DIAGNOSTICS --
 outputToDiagnostics :: Text -> (SysE.ExitCode, String, String) -> Either Text [Diagnostic]
-outputToDiagnostics elmFilePath (exitCode, stdOutString, stdErrString) =
+outputToDiagnostics filePath (exitCode, stdOutString, stdErrString) =
   case exitCode of
     SysE.ExitFailure _ ->
-      let eitherAllDiagnostics =
+      let
+          eitherAllDiagnostics =
             stdErrString
               |> Text.pack
               |> Misc.textToByteString
               |> A.eitherDecode
               |> Misc.mapLeft Text.pack
-              |> fmap toDiagnostics
+              |> fmap (toDiagnostics filePath)
       in
       case eitherAllDiagnostics of
         Left error ->
@@ -202,7 +242,7 @@ outputToDiagnostics elmFilePath (exitCode, stdOutString, stdErrString) =
           allDiagnostics
             |> List.find
               (\(pathForDiagnostics, _) ->
-                elmFilePath == pathForDiagnostics
+                filePath == pathForDiagnostics
               )
             |> fmap snd
             |> Maybe.fromMaybe []
@@ -212,12 +252,12 @@ outputToDiagnostics elmFilePath (exitCode, stdOutString, stdErrString) =
       Right []
 
 run :: Text -> Text -> IO (Either Text [Diagnostic])
-run elmExectuablePath elmFilePath =
+run elmExectuablePath filePath =
   fmap
-    (outputToDiagnostics elmFilePath)
+    (outputToDiagnostics filePath)
     (SysP.readProcessWithExitCode
       (Text.unpack elmExectuablePath)
-      ["make", Text.unpack elmFilePath, "--report=json"]
+      ["make", Text.unpack filePath, "--report=json"]
       ""
     )
 

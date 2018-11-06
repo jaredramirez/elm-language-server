@@ -29,9 +29,9 @@ ioToEither io =
   tryJust exceptionToText io
 
 -- ELM EXECTUABLE SEARCH --
-findElmExectuable :: FilePath -> IO (Either Text FilePath)
+findElmExectuable :: Text -> IO (Either Text FilePath)
 findElmExectuable elmFilePath =
-  let dir = elmFilePath |> List.dropWhileEnd (/= '/') |> init
+  let dir = elmFilePath |> Text.unpack |> List.dropWhileEnd (/= '/') |> init
   in catch (findElmExectuableHelper dir) handleException
 
 
@@ -138,12 +138,12 @@ copyElmFileTreeHelper !destination !source =
         |> mapM_ (copyItem source destination)
 
 
-copyElmFileTree :: FilePath -> FilePath -> IO (Either Text ())
+copyElmFileTree :: Text -> Text -> IO (Either Text ())
 copyElmFileTree destination source =
   tryJust exceptionToText
     (copyElmFileTreeHelper
-      (FilePath.normalise destination)
-      (FilePath.normalise source)
+      (destination |> Text.unpack |> FilePath.normalise)
+      (source |> Text.unpack |> FilePath.normalise)
     )
 
 

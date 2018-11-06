@@ -41,8 +41,8 @@ fromCode err =
 instance A.FromJSON Error where
   parseJSON =
     A.withScientific "Error" $ \num ->
-      let text = num |> AUtils.floatingOrInteger |> Misc.toInt
-      in case fromCode text of
+      let int_ = num |> AUtils.floatingOrInteger |> Misc.toInt
+      in case fromCode int_ of
           Nothing ->
             fail "invalid error"
 

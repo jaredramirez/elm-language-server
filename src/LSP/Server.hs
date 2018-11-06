@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy        as BS
 import qualified Data.Map.Strict             as Map
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as Text
+import qualified Data.List                   as List
 import qualified LSP.Data.Message            as Message
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import qualified LSP.Data.RequestMethod      as RequestMethod
@@ -50,6 +51,9 @@ loop model =
 
                   U.Send byteString ->
                     BS.putStr byteString
+
+                  U.SendMany byteStrings ->
+                    sequence_ (List.map BS.putStr byteStrings)
           in
           Log.logger ("Response: " ++ show response) >>
             Log.logger ("Termination: " ++ show termination) >>

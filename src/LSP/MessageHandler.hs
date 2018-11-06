@@ -7,6 +7,7 @@ module LSP.MessageHandler
 import           Data.Aeson                  (Value)
 import qualified Data.Aeson                  as A
 import qualified Data.ByteString.Lazy        as BS
+import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
@@ -14,11 +15,14 @@ import qualified Data.Maybe                  as Maybe
 import           LSP.Data.ElmConfig          (ElmConfig)
 import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.Error              as Error
+import qualified LSP.Data.FileEvent          as FileEvent
+import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
 import           LSP.Data.NotificationMethod ( TextDocumentDidOpenParams
                                              , TextDocumentDidChangeParams
                                              , TextDocumentDidSaveParams
+                                             , DidChangeWatchedFilesParams
                                              )
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import           LSP.Data.RequestMethod      (InitializeParams)
@@ -59,6 +63,9 @@ handler model incomingMessage =
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidSave params)) ->
       textDocumentDidSaveHandler model params
 
+    (True, Message.NotificationMessage (NotificationMethod.DidChangeWatchedFiles params)) ->
+      didChangeWatchedFiles model params
+
     (True, Message.RequestMessage _ RequestMethod.Shutdown) ->
       U.RequestShutDown
         |> return
@@ -78,24 +85,12 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
         (URI.URI projectRoot) =
           uri
 
-        projectRootString =
-          Text.unpack projectRoot
-
-        pathToClonedRoot =
-          projectRoot
-            |> M.makeClonePathRoot
-
-        elmConfigPath =
-          projectRootString ++ "/elm.json"
+        clonedRoot =
+          projectRoot |> M.makeClonePathRoot
 
         exectuableTask :: IO (Either Text FilePath)
         exectuableTask =
-          projectRootString
-            |> LSP.Misc.findElmExectuable
-
-        elmConfigTask :: IO (Either Text ElmConfig)
-        elmConfigTask =
-            ElmConfig.parseFromFile elmConfigPath
+          projectRoot |> LSP.Misc.findElmExectuable
 
         cloneElmSrcTask :: ElmConfig -> IO (Either Text ())
         cloneElmSrcTask elmConfig =
@@ -108,15 +103,18 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
                           ["."]
 
                         else
-                          List.map (Text.unpack) list
+                          list
                      )
-
-              pathToClonedRootString =
-                pathToClonedRoot |> Text.unpack
           in
-          Dir.createDirectoryIfMissing True pathToClonedRootString >>
-          Dir.copyFile elmConfigPath (pathToClonedRootString ++ "/elm.json") >>
-          sequence (List.map (LSP.Misc.copyElmFileTree pathToClonedRootString) sourceDirectories) >>=
+          sequence
+            (List.map
+              (\path ->
+                LSP.Misc.copyElmFileTree
+                  (clonedRoot <> "/" <> path)
+                  path
+              )
+              sourceDirectories
+            ) >>=
             \listOfEithers ->
               return
                 (listOfEithers
@@ -125,15 +123,15 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
                 )
 
         eitherIOMsg =
-          exectuableTask `andThenIO` \exectuable ->
-          elmConfigTask  `andThenIO` \elmConfig ->
-          cloneElmSrcTask elmConfig  `andThenIO` \_ ->
+          exectuableTask `bindEitherIO` \exectuable ->
+          elmConfigTask projectRoot clonedRoot `bindEitherIO` \elmConfig ->
+          cloneElmSrcTask elmConfig `bindEitherIO` \_ ->
             U.Initialize
               id
               projectRoot
               (Text.pack exectuable)
               elmConfig
-              pathToClonedRoot
+              clonedRoot
               |> Right
               |> return
     in
@@ -155,7 +153,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
         (URI.URI filePath) = uri
 
         eitherIOMsg =
-          createFileCloneIfNeededTask model filePath `andThenIO` \createFilePath ->
+          createFileCloneIfNeededTask model filePath `bindEitherIO` \createFilePath ->
           diagnosticsTask model createFilePath
     in
     eitherIOMsg
@@ -191,9 +189,9 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
                   (NotificationMethod.ContentChange actualContentChanges) =
                     head
               in
-              createFileCloneIfNeededTask model filePath `andThenIO` \clonedFilePath ->
-              updateFileContentsTask clonedFilePath actualContentChanges `andThenIO` \() ->
-              diagnosticsTask model clonedFilePath `andThenIO` \diagnostics ->
+              createFileCloneIfNeededTask model filePath `bindEitherIO` \clonedFilePath ->
+              updateFileContentsTask clonedFilePath actualContentChanges `bindEitherIO` \() ->
+              diagnosticsTask model clonedFilePath `bindEitherIO` \diagnostics ->
                 return (Right (diagnostics, actualContentChanges))
     in
     eitherIOMsg
@@ -211,7 +209,7 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
           )
 
 
-textDocumentDidSaveHandler:: Model -> TextDocumentDidSaveParams -> IO Msg
+textDocumentDidSaveHandler :: Model -> TextDocumentDidSaveParams -> IO Msg
 textDocumentDidSaveHandler model (NotificationMethod.TextDocumentDidSaveParams uri) =
     let
         (URI.URI filePath) = uri
@@ -228,7 +226,57 @@ textDocumentDidSaveHandler model (NotificationMethod.TextDocumentDidSaveParams u
         )
 
 
+didChangeWatchedFiles :: Model -> DidChangeWatchedFilesParams -> IO Msg
+didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams params) =
+  let
+      relevantChange =
+        List.foldl
+          (\acc cur@(FileEvent.FileEvent uri changeType)  ->
+            let
+                (URI.URI filePath) = uri
+            in
+            if Text.isSuffixOf M.elmConfigFileName filePath then
+              case changeType of
+                FileChangeType.Changed ->
+                  Just cur
+
+                _ ->
+                  acc
+            else
+              acc
+          )
+          Nothing
+          params
+
+      task :: IO (Either Text ElmConfig)
+      task =
+        case (M._package model, relevantChange) of
+          (Just package, Just _) ->
+            elmConfigTask (M._rootPath package) (M._clonedFilePathRoot package)
+
+          (_, Nothing) ->
+            return (Left "No relevant changes")
+
+          (Nothing, _) ->
+            return (Left "No existing elm data")
+
+  in
+  fmap
+    (\either ->
+      case either of
+        Left error ->
+          U.SendNotifError Error.InternalError error
+
+        Right elmConfig ->
+          U.UpdateElmConfig elmConfig
+    )
+    task
+
+
 -- TASKS
+
+-- This task runs the elm compiler with the flag `--report=json` on
+-- the given file and parses the results
 diagnosticsTask :: Model -> Text -> IO (Either Text [Diagnostic])
 diagnosticsTask model filePath =
   case M._package model of
@@ -239,12 +287,16 @@ diagnosticsTask model filePath =
       Diagnostics.run exectuable filePath
 
 
+-- This task writes the given changes (it expects the whole file) to the
+-- give path
 updateFileContentsTask :: Text -> Text -> IO (Either Text ())
 updateFileContentsTask filePath nextContent =
   writeFile (Text.unpack filePath) (Text.unpack nextContent)
     |> LSP.Misc.ioToEither
 
 
+-- This task takes the filePath given, and clones it (and it's parent directories)
+-- to the source clone
 createFileCloneIfNeededTask :: Model -> Text -> IO (Either Text Text)
 createFileCloneIfNeededTask model fullFilePath =
   let
@@ -266,7 +318,7 @@ createFileCloneIfNeededTask model fullFilePath =
           parentDir =
             LSP.Misc.getFileParentDir clonedFilePathString
       in
-      LSP.Misc.ioToEither (Dir.doesFileExist clonedFilePathString) `andThenIO`
+      LSP.Misc.ioToEither (Dir.doesFileExist clonedFilePathString) `bindEitherIO`
         \doesExist ->
           if doesExist then
             return (Right clonedFilePath)
@@ -276,11 +328,34 @@ createFileCloneIfNeededTask model fullFilePath =
             Dir.copyFile fullFilePathString clonedFilePathString >>
             return (Right clonedFilePath)
 
+
+-- This task parses elm.json and clones it to our source clone
+elmConfigTask :: Text -> Text -> IO (Either Text ElmConfig)
+elmConfigTask projectRoot clonedRoot =
+  let
+      elmConfigPath =
+        (projectRoot <> "/" <> M.elmConfigFileName)
+
+      elmConfigPathString =
+        Text.unpack elmConfigPath
+
+      clonedRootString =
+        Text.unpack clonedRoot
+
+      clonedElmConfigPathString =
+        clonedRootString ++ Text.unpack ("/" <> M.elmConfigFileName)
+  in
+  ElmConfig.parseFromFile elmConfigPath `bindEitherIO` \elmConfig ->
+    Dir.createDirectoryIfMissing True clonedRootString >>
+    Dir.copyFile elmConfigPathString clonedElmConfigPathString >>
+    return (Right elmConfig)
+
+
 -- HELPERS
-andThenIO :: IO (Either err resultA) -> (resultA -> IO (Either err resultB)) -> IO (Either err resultB)
-andThenIO io func =
-  io >>= \maybe ->
-    case maybe of
+bindEitherIO :: IO (Either err resultA) -> (resultA -> IO (Either err resultB)) -> IO (Either err resultB)
+bindEitherIO io func =
+  io >>= \either ->
+    case either of
       Left err ->
         return (Left err)
 

@@ -22,8 +22,7 @@ import qualified Misc
 
 data ElmConfig
   = Application
-    { appName :: Text
-    , appSourceDirectories :: [Text]
+    { appSourceDirectories :: [Text]
     , appElmVersion :: Text
     , appDirectDependencies :: Maybe (HashMap Text Text)
     , appIndirectDependencies :: Maybe (HashMap Text Text)
@@ -73,11 +72,10 @@ parseDependencies dependencyType v =
 
 parseApplication :: HashMap Text Value -> Parser ElmConfig
 parseApplication v =
-  let make name sourceDirectories elmVersion (directDeps, indirectDeps) (directTestDeps, indirectTestDeps) =
-        Application name sourceDirectories elmVersion directDeps indirectDeps directTestDeps indirectTestDeps
+  let make sourceDirectories elmVersion (directDeps, indirectDeps) (directTestDeps, indirectTestDeps) =
+        Application sourceDirectories elmVersion directDeps indirectDeps directTestDeps indirectTestDeps
   in
   return make
-    <*> v .: "name"
     <*> v .: "source-directories"
     <*> v .: "elm-version"
     <*> parseDependencies Dependencies v
@@ -131,16 +129,18 @@ instance FromJSON ElmConfig where
 getElmSourceDirectories :: ElmConfig -> [Text]
 getElmSourceDirectories config =
   case config of
-    Application _ appSourceDirs _ _ _ _ _ ->
+    Application appSourceDirs _ _ _ _ _ ->
       appSourceDirs
 
     Package _ _ _ _ _ _ _ _ ->
       []
 
 
-parseFromFile :: FilePath -> IO (Either Text ElmConfig)
+parseFromFile :: Text -> IO (Either Text ElmConfig)
 parseFromFile filePath =
-  BS.readFile filePath
+  filePath
+    |> T.unpack
+    |> BS.readFile
     |> fmap
       (\text ->
         text

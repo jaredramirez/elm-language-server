@@ -45,6 +45,9 @@ executable elm-language-server-exe
       LSP.Data.DocumentSelector
       LSP.Data.Error
       LSP.Data.ElmConfig
+      LSP.Data.FileChangeType
+      LSP.Data.FileEvent
+      LSP.Data.FileSystemWatcher
       LSP.Data.Header
       LSP.Data.Location
       LSP.Data.Message
@@ -52,6 +55,7 @@ executable elm-language-server-exe
       LSP.Data.NotificationMethod
       LSP.Data.Position
       LSP.Data.Range
+      LSP.Data.Registration
       LSP.Data.RequestMethod
       LSP.Data.TextDocumentIdentifier
       LSP.Data.URI
