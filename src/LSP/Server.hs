@@ -4,6 +4,7 @@ module LSP.Server
   ( run
   ) where
 
+import           Control.Exception           (SomeException, catch)
 import qualified Data.ByteString.Lazy        as BS
 import qualified Data.Map.Strict             as Map
 import           Data.Semigroup              ((<>))
@@ -23,12 +24,12 @@ import qualified System.Directory            as Dir
 import qualified System.IO                   as IO
 
 run :: IO Int
-run = do
-  IO.hSetBuffering IO.stdin IO.NoBuffering
-  IO.hSetEncoding IO.stdin IO.utf8
-  IO.hSetBuffering IO.stdout IO.NoBuffering
-  IO.hSetEncoding IO.stdout IO.utf8
-  loop U.init
+run =
+  IO.hSetBuffering IO.stdin IO.NoBuffering >>
+  IO.hSetEncoding IO.stdin IO.utf8 >>
+  IO.hSetBuffering IO.stdout IO.NoBuffering >>
+  IO.hSetEncoding IO.stdout IO.utf8 >>
+  catch (loop U.init) handleException
 
 loop :: Model -> IO Int
 loop model =
@@ -55,11 +56,16 @@ loop model =
                   U.SendMany byteStrings ->
                     sequence_ (List.map BS.putStr byteStrings)
           in
+          Log.logger ("Msg: " ++ show msg) >>
           Log.logger ("Response: " ++ show response) >>
-            Log.logger ("Termination: " ++ show termination) >>
-              case termination of
-                U.ShouldTerminate ->
-                  return 1
+          Log.logger ("Termination: " ++ show termination) >>
+            case termination of
+              U.ShouldTerminate ->
+                return 1
 
-                U.ShouldNotTerminate ->
-                  responseIO >> loop nextModel
+              U.ShouldNotTerminate ->
+                responseIO >> loop nextModel
+
+handleException :: SomeException -> IO Int
+handleException ex =
+  print ex >> Log.logger ex >> return 1

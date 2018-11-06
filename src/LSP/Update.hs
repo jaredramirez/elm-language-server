@@ -52,7 +52,7 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text ElmConfig Text
+  = Initialize Text Text Text Text ElmConfig
   | UpdateElmConfig ElmConfig
   | UpdateDocument URI M.Document
   | SendDiagnostics URI [Diagnostic]
@@ -67,16 +67,16 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot executable config clonedFilePath ->
+    Initialize id projectRoot clonedProjectRoot executable config ->
       ( model
           { M._initialized = True
           , M._package =
             Just <|
               M.Package
                 projectRoot
+                clonedProjectRoot
                 executable
                 config
-                clonedFilePath
           }
       , SendMany
         [ Message.encode

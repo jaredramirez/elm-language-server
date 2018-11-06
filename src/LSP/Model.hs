@@ -5,8 +5,8 @@ module LSP.Model
   , Package(..)
   , Document(..)
   , elmConfigFileName
-  , makeClonePathRoot
-  , filePathToClonedFilePath
+  , toCloneProjectRoot
+  , switchProjectRootWithClonedProjectRoot
   ) where
 
 import Data.HashMap.Strict (HashMap)
@@ -29,10 +29,10 @@ data Model = Model
 
 
 data Package = Package
-  { _rootPath :: Text
+  { _projectRoot :: Text
+  , _clonedProjectRoot :: Text
   , _exectuable :: Text
   , _elmConfig :: ElmConfig
-  , _clonedFilePathRoot :: Text
   -- TODO: Add elm-format path
   } deriving (Show)
 
@@ -47,22 +47,23 @@ elmConfigFileName :: Text
 elmConfigFileName =
   "elm.json"
 
-makeClonePathRoot :: Text -> Text
-makeClonePathRoot root =
+
+toCloneProjectRoot :: Text -> Text
+toCloneProjectRoot root =
   root <> "/elm-stuff/.lsp/clone"
 
 
-filePathToClonedFilePath :: Model -> Text -> Maybe Text
-filePathToClonedFilePath model filePath =
+switchProjectRootWithClonedProjectRoot :: Model -> Text -> Maybe Text
+switchProjectRootWithClonedProjectRoot model filePath =
   _package model >>=
     \package ->
       let
-          rootPath =
-            _rootPath package
+          projectRoot =
+            _projectRoot package
 
-          clonedFilePathRoot =
-            _clonedFilePathRoot package
+          clonedProjectroot =
+            _clonedProjectRoot package
       in
       filePath
-        |> Text.stripPrefix rootPath
-        |> fmap (\suffix -> clonedFilePathRoot <> suffix)
+        |> Text.stripPrefix projectRoot
+        |> fmap (\suffix -> clonedProjectroot <> suffix)

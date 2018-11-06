@@ -16,6 +16,7 @@ import qualified Data.Maybe as Maybe
 import Data.Semigroup ((<>))
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified LSP.Log as Log
 import LSP.Data.Diagnostic (Diagnostic)
 import qualified LSP.Data.Diagnostic as D
 import LSP.Data.Range (Range)
@@ -253,6 +254,8 @@ outputToDiagnostics filePath (exitCode, stdOutString, stdErrString) =
 
 run :: Text -> Text -> IO (Either Text [Diagnostic])
 run elmExectuablePath filePath =
+  Log.logger elmExectuablePath >>
+  Log.logger filePath >>
   fmap
     (outputToDiagnostics filePath)
     (SysP.readProcessWithExitCode
@@ -260,12 +263,3 @@ run elmExectuablePath filePath =
       ["make", Text.unpack filePath, "--report=json"]
       ""
     )
-
-logger ::  Show a => a -> IO ()
-logger  message =
-  let dirPath = "/Users/jaredramirez/dev/src/github.com/jaredramirez/elm-field"
-      dirPathModified = Text.append dirPath "/elm-stuff/.lsp"
-      filePath = Text.append dirPathModified "/debug.log"
-  in Dir.createDirectoryIfMissing True (Text.unpack dirPathModified) >>
-     IO.openFile (Text.unpack filePath) IO.AppendMode >>= \handle ->
-     IO.hPrint handle message >> IO.hClose handle

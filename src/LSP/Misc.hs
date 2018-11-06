@@ -29,35 +29,35 @@ ioToEither io =
   tryJust exceptionToText io
 
 -- ELM EXECTUABLE SEARCH --
-findElmExectuable :: Text -> IO (Either Text FilePath)
-findElmExectuable elmFilePath =
-  let dir = elmFilePath |> Text.unpack |> List.dropWhileEnd (/= '/') |> init
-  in catch (findElmExectuableHelper dir) handleException
+findElmExectuable :: Text -> IO (Either Text Text)
+findElmExectuable projectRoot =
+  let normalised = projectRoot |> Text.unpack |> FilePath.normalise
+  in catch (findElmExectuableHelper normalised) handleExceptionEither
 
 
-findElmExectuableHelper :: FilePath -> IO (Either Text FilePath)
+findElmExectuableHelper :: FilePath -> IO (Either Text Text)
 findElmExectuableHelper !path =
-  findInDir "node_modules" path >>= \case
-    Nothing ->
-      Dir.findExecutable "elm" >>= \maybeExectuable ->
-        return
-          (maybeToEither
-             ("I couldn't find an elm executable!  I didn't see " <>
-              "any \"node_modules\" folder to look for a local installation, " <>
-              "so I only checked your $PATH for a global installation.")
-             maybeExectuable)
-    Just nodeModulesContents ->
-      findInDir ".bin" nodeModulesContents >>= lift (findInDir "elm") >>= \case
-        Nothing ->
-          Dir.findExecutable "elm" >>= \maybeExectuable ->
-            return
-              (maybeToEither
-                 ("Could not find elm executable! I searched \"" <>
-                  Text.pack path <>
-                  "/node_modules/.bin/\" for a local installation, " <>
-                  "and your $PATH for a global installation.")
-                 maybeExectuable)
-        Just elmPath -> return (Right elmPath)
+  let
+      localPath = path ++ "node_modules/.bin/elm"
+  in
+  Dir.doesFileExist localPath >>= \doesExist ->
+    if doesExist then
+      localPath
+        |> Text.pack
+        |> Right
+        |> return
+
+    else
+      fmap
+        (\maybeExectuable ->
+          maybeExectuable
+            |> fmap Text.pack
+            |> maybeToEither
+              ("I couldn't find an elm executable!  I didn't see"
+                <> " it in \"node_modules/.bin/\" or your $PATH."
+              )
+        )
+        (Dir.findExecutable "elm")
 
 
 -- COPY ELM FILE TREE
@@ -107,11 +107,6 @@ copyItem !baseSourcePath !baseTargetPath (relativePath, isDir) =
         targetPath =
           baseTargetPath ++ relativePath
     in
-    putStrLn relativePath >>
-    putStrLn relativePath >>
-    putStrLn sourcePath >>
-    putStrLn targetPath >>
-    putStrLn "" >>
     if isDir then
       Dir.createDirectoryIfMissing True targetPath
 
@@ -123,7 +118,6 @@ copyElmFileTreeHelper :: FilePath -> FilePath -> IO ()
 copyElmFileTreeHelper !destination !source =
     Dir.createDirectoryIfMissing True destination >>
     getElmFiles source >>= \subItems ->
-      putStrLn (show subItems) >>
       subItems
         |> List.foldl
             (\(dirs, paths) cur@(path, isDir) ->
@@ -152,28 +146,21 @@ exceptionToText ex = Just (Text.pack (show ex))
 
 
 -- SEARCH HELPERS
-findInDir :: String -> FilePath -> IO (Maybe FilePath)
-findInDir !search !filePath =
-  Dir.getDirectoryContents filePath >>= \filePathContents ->
-    let searchResult = List.find (List.isSuffixOf search) filePathContents
-    in case searchResult of
-         Nothing     -> return Nothing
-         Just result -> return (Just result)
-
-
-lift :: (param -> IO (Maybe result)) -> Maybe param -> IO (Maybe result)
-lift func param =
-  case param of
-    Nothing         -> return Nothing
-    Just paramValue -> func paramValue
-
-
 maybeToEither :: e -> Maybe r -> Either e r
 maybeToEither error maybeResult =
   case maybeResult of
-    Nothing     -> Left error
-    Just result -> Right result
+    Nothing ->
+      Left error
+
+    Just result ->
+      Right result
 
 
-handleException :: SomeException -> IO (Either Text a)
-handleException ex = return (Left (Text.pack (show ex)))
+handleExceptionEither :: SomeException -> IO (Either Text a)
+handleExceptionEither ex =
+  return (Left (Text.pack (show ex)))
+
+
+handleExceptionMaybe :: SomeException -> IO (Maybe a)
+handleExceptionMaybe ex =
+  return Nothing

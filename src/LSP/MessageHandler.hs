@@ -85,10 +85,10 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
         (URI.URI projectRoot) =
           uri
 
-        clonedRoot =
-          projectRoot |> M.makeClonePathRoot
+        clonedProjectRoot =
+          projectRoot |> M.toCloneProjectRoot
 
-        exectuableTask :: IO (Either Text FilePath)
+        exectuableTask :: IO (Either Text Text)
         exectuableTask =
           projectRoot |> LSP.Misc.findElmExectuable
 
@@ -110,7 +110,7 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
             (List.map
               (\path ->
                 LSP.Misc.copyElmFileTree
-                  (clonedRoot <> "/" <> path)
+                  (clonedProjectRoot <> "/" <> path)
                   path
               )
               sourceDirectories
@@ -124,14 +124,9 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
 
         eitherIOMsg =
           exectuableTask `bindEitherIO` \exectuable ->
-          elmConfigTask projectRoot clonedRoot `bindEitherIO` \elmConfig ->
+          elmConfigTask projectRoot clonedProjectRoot `bindEitherIO` \elmConfig ->
           cloneElmSrcTask elmConfig `bindEitherIO` \_ ->
-            U.Initialize
-              id
-              projectRoot
-              (Text.pack exectuable)
-              elmConfig
-              clonedRoot
+            U.Initialize id projectRoot clonedProjectRoot exectuable elmConfig
               |> Right
               |> return
     in
@@ -153,7 +148,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
         (URI.URI filePath) = uri
 
         eitherIOMsg =
-          createFileCloneIfNeededTask model filePath `bindEitherIO` \createFilePath ->
+          createOrGetFileCloneTask model filePath `bindEitherIO` \createFilePath ->
           diagnosticsTask model createFilePath
     in
     eitherIOMsg
@@ -189,7 +184,7 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
                   (NotificationMethod.ContentChange actualContentChanges) =
                     head
               in
-              createFileCloneIfNeededTask model filePath `bindEitherIO` \clonedFilePath ->
+              createOrGetFileCloneTask model filePath `bindEitherIO` \clonedFilePath ->
               updateFileContentsTask clonedFilePath actualContentChanges `bindEitherIO` \() ->
               diagnosticsTask model clonedFilePath `bindEitherIO` \diagnostics ->
                 return (Right (diagnostics, actualContentChanges))
@@ -252,7 +247,7 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
       task =
         case (M._package model, relevantChange) of
           (Just package, Just _) ->
-            elmConfigTask (M._rootPath package) (M._clonedFilePathRoot package)
+            elmConfigTask (M._projectRoot package) (M._clonedProjectRoot package)
 
           (_, Nothing) ->
             return (Left "No relevant changes")
@@ -281,10 +276,10 @@ diagnosticsTask :: Model -> Text -> IO (Either Text [Diagnostic])
 diagnosticsTask model filePath =
   case M._package model of
     Nothing ->
-      return (Left "Elm exectuable not found")
+      return (Left "Elm exectuable was not found")
 
-    Just (M.Package _ exectuable _ _) ->
-      Diagnostics.run exectuable filePath
+    Just package ->
+      Diagnostics.run (M._exectuable package) filePath
 
 
 -- This task writes the given changes (it expects the whole file) to the
@@ -297,15 +292,15 @@ updateFileContentsTask filePath nextContent =
 
 -- This task takes the filePath given, and clones it (and it's parent directories)
 -- to the source clone
-createFileCloneIfNeededTask :: Model -> Text -> IO (Either Text Text)
-createFileCloneIfNeededTask model fullFilePath =
+createOrGetFileCloneTask :: Model -> Text -> IO (Either Text Text)
+createOrGetFileCloneTask model fullFilePath =
   let
       maybeClonedFilePath =
-        M.filePathToClonedFilePath model fullFilePath
+        M.switchProjectRootWithClonedProjectRoot model fullFilePath
   in
   case maybeClonedFilePath of
     Nothing ->
-      return (Left "Cloned file root was not defined")
+      return (Left "Issue getting cloned file path")
 
     Just clonedFilePath ->
       let
