@@ -39,7 +39,6 @@ loop model =
         loop model
 
       Right message ->
-        Log.logger ("Got Message: " ++ show decoded) >>
         MessageHandler.handler model message >>= \msg ->
           let
               (nextModel, response, termination) =
@@ -56,9 +55,11 @@ loop model =
                   U.SendMany byteStrings ->
                     sequence_ (List.map BS.putStr byteStrings)
           in
+          Log.logger ("Model: " ++ show nextModel) >>
           Log.logger ("Msg: " ++ show msg) >>
           Log.logger ("Response: " ++ show response) >>
           Log.logger ("Termination: " ++ show termination) >>
+          Log.logger "" >>
             case termination of
               U.ShouldTerminate ->
                 return 1

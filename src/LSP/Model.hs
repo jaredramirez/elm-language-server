@@ -3,7 +3,6 @@
 module LSP.Model
   ( Model(..)
   , Package(..)
-  , Document(..)
   , elmConfigFileName
   , toCloneProjectRoot
   , switchProjectRootWithClonedProjectRoot
@@ -24,7 +23,6 @@ data Model = Model
   { _shouldTerminate :: Bool
   , _initialized :: Bool
   , _package :: Maybe Package
-  , _documents :: HashMap URI Document
   } deriving (Show)
 
 
@@ -34,12 +32,6 @@ data Package = Package
   , _exectuable :: Text
   , _elmConfig :: ElmConfig
   -- TODO: Add elm-format path
-  } deriving (Show)
-
-
-data Document = Document
-  { _version :: Int
-  , _text :: Text
   } deriving (Show)
 
 

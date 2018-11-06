@@ -11,8 +11,6 @@ module LSP.Update
 import           Data.Aeson                  ((.=))
 import qualified Data.Aeson                  as A
 import qualified Data.ByteString.Lazy        as BS
-import           Data.HashMap.Strict         (HashMap)
-import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified LSP.Data.Capabilities       as Capabilities
@@ -38,7 +36,7 @@ import           Misc                        ((<|), (|>))
 import           Prelude                     hiding (init)
 
 init :: Model
-init = M.Model False False Nothing HM.empty
+init = M.Model False False Nothing
 
 data Response
   = Send BS.ByteString
@@ -54,9 +52,7 @@ data ShouldTermiate
 data Msg
   = Initialize Text Text Text Text ElmConfig
   | UpdateElmConfig ElmConfig
-  | UpdateDocument URI M.Document
   | SendDiagnostics URI [Diagnostic]
-  | UpdateDocumentAndSendDiagnostics URI M.Document [Diagnostic]
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
@@ -111,38 +107,8 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    UpdateDocument uri document ->
-      ( model
-          { M._documents =
-              model
-                |> M._documents
-                |> HM.alter (const (Just document)) uri
-          }
-      , None
-      , ShouldNotTerminate
-      )
-
     SendDiagnostics uri diagnostics ->
       ( model
-      , let encode :: Message () -> BS.ByteString
-            encode = Message.encode
-          in
-          (uri, diagnostics)
-            |> NotifMethod.PublishDiagnosticsParams
-            |> NotifMethod.PublishDiagnostics
-            |> Message.NotificationMessage
-            |> encode
-            |> Send
-      , ShouldNotTerminate
-      )
-
-    UpdateDocumentAndSendDiagnostics uri document diagnostics ->
-      ( model
-          { M._documents =
-              model
-                |> M._documents
-                |> HM.alter (const (Just document)) uri
-          }
       , let encode :: Message () -> BS.ByteString
             encode = Message.encode
           in

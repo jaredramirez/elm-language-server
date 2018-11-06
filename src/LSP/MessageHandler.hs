@@ -159,7 +159,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
               U.SendNotifError Error.InternalError error
 
             Right diagnostics ->
-              U.UpdateDocumentAndSendDiagnostics uri (M.Document version document) diagnostics
+              U.SendDiagnostics uri diagnostics
         )
 
 
@@ -187,7 +187,7 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
               createOrGetFileCloneTask model filePath `bindEitherIO` \clonedFilePath ->
               updateFileContentsTask clonedFilePath actualContentChanges `bindEitherIO` \() ->
               diagnosticsTask model clonedFilePath `bindEitherIO` \diagnostics ->
-                return (Right (diagnostics, actualContentChanges))
+                return (Right diagnostics)
     in
     eitherIOMsg
       |> fmap
@@ -196,11 +196,8 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
               Left errorMessage ->
                 U.SendNotifError Error.InvalidParams errorMessage
 
-              Right (diagnostics, contentChanges) ->
-                U.UpdateDocumentAndSendDiagnostics
-                  uri
-                  (M.Document version contentChanges)
-                  diagnostics
+              Right diagnostics ->
+                U.SendDiagnostics uri diagnostics
           )
 
 
