@@ -4,6 +4,7 @@ module LSP.MessageHandler
   ( handler
   ) where
 
+import qualified Analyze.Diagnostics         as Diagnostics
 import           Data.Aeson                  (Value)
 import qualified Data.Aeson                  as A
 import qualified Data.ByteString.Lazy        as BS
@@ -29,7 +30,6 @@ import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Data.URI                as URI
 import           LSP.Data.Diagnostic         (Diagnostic)
-import qualified LSP.Diagnostics             as Diagnostics
 import qualified LSP.Log                     as Log
 import qualified LSP.Misc
 import           LSP.Model                   (Model)

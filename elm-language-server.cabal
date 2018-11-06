@@ -38,7 +38,7 @@ executable elm-language-server-exe
 
   other-modules:
       Paths_elm_language_server
-      Analyze.Hover
+      Analyze.Diagnostics
       LSP.Data.Capabilities
       LSP.Data.Diagnostic
       LSP.Data.DocumentFilter
@@ -59,7 +59,6 @@ executable elm-language-server-exe
       LSP.Data.RequestMethod
       LSP.Data.TextDocumentIdentifier
       LSP.Data.URI
-      LSP.Diagnostics
       LSP.MessageHandler
       LSP.Misc
       LSP.Model

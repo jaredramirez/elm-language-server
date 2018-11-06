@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.Diagnostics
+module Analyze.Diagnostics
   ( ElmDiagnostics
   , run
   ) where
