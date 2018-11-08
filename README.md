@@ -13,6 +13,7 @@ First, download the latest binary from the releases page.
 ### Neovim
 
 * Make sure the elm-language-server binary is either a) available on your path, or b) have an absolute path to wherever the binary is stored
+* Install and setup [neovim](https://neovim.io/)
 * Install [neovim language client](https://github.com/autozimu/LanguageClient-neovim)
   <!-- - Install [neovim completeion manager 2](https://github.com/ncm2/ncm2) -->
 * Append your config with the following:
@@ -21,10 +22,9 @@ First, download the latest binary from the releases page.
   set hidden
 
   let g:LanguageClient_serverCommands = {
-  \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
-  \ 'javascript': ['/usr/local/bin/javascript-typescript-stdio'],
-  \ 'javascript.jsx': ['tcp://127.0.0.1:2089'],
-  \ 'python': ['/usr/local/bin/pyls'],
+  \ 'elm': ['elm-language-server-exe'],
+  " OR
+  \ 'elm': ['/path/to/elm-language-server-exe'],
   \ }
   ```
 
@@ -33,7 +33,7 @@ First, download the latest binary from the releases page.
 This project is still in pretty early development, so the feature set is currently limited.
 
 * As-you-type diagnostics (compiler errors, etc)
-* Find's user installed elm version to build codebase against, either global or local (node_modules) installation
+* Find user installed elm version to get diagnostics, either global or local (node_modules) installations
 
 ## Future
 
