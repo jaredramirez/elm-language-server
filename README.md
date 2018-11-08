@@ -33,11 +33,11 @@ First, download the latest binary from the releases page.
 This project is still in pretty early development, so the feature set is currently limited.
 
 * As-you-type diagnostics (compiler errors, etc)
-* Find user installed elm version to get diagnostics, either global or local (node_modules) installations
+* Find and use either global or local (node_modules) elm installations to get diagnostics
 
-## Future
+## Future/Contributing
 
-This is actively being developed, so there are many things in the pipeline. The first, and most important thing, is making (or borrowing) an error tolerant parser to get an AST. Once we have that working and integrated, the interesting work of this project can begin. I'm heavily in the research aspect of this stage, looking at the 0.19 parser, the elm-format parser, and some other readings on the topic. If you have any expertise in this area, please reach out to me so I can learn eveything I can.
+This is actively being developed, so there are many things in the pipeline. The first, and most important thing, is making (or borrowing) an error tolerant parser to get an AST. Once we have that working and integrated, the interesting work of this project can begin (auto-completion, varabile rename, goto defintion, etc). I'm heavily in the research aspect of this stage, looking at the 0.19 parser, the elm-format parser, and some other readings on the topic. If you have any expertise in this area, please reach out to me so I can learn eveything I can to make this as good as possible.
 
 If other's are interested in working on this project as well, that would be great! Please reach out to me (email, twitter) before starting anything so we can avoid working on the same thing and properly plan.
 
