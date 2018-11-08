@@ -7,6 +7,7 @@ module LSP.Misc
   , findElmExectuable
   , getFileParentDir
   , copyElmFileTree
+  , getElmVersion
   ) where
 
 import           Control.Exception        (SomeException, catch, tryJust)
@@ -17,16 +18,45 @@ import qualified Data.HashMap.Strict      as HM
 import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
+import           LSP.Data.ElmConfig       (ElmVersion)
+import qualified LSP.Data.ElmConfig       as ElmConfig
 import qualified LSP.Log                  as Log
 import           Misc                     ((<|), (|>), mapLeft)
 import qualified System.Directory         as Dir
 import           System.FilePath          ((</>))
 import qualified System.FilePath          as FilePath
 import qualified System.FilePath.Glob     as Glob
+import           System.Exit              as SysE
+import           System.Process           as SysP
 
 ioToEither :: IO value -> IO (Either Text value)
 ioToEither io =
   tryJust exceptionToText io
+
+
+-- ELM EXECTUABLE VERSION --
+getElmVersion :: Text -> IO (Either Text ElmVersion)
+getElmVersion elmExectuablePath =
+  fmap
+    (\(exitCode, stdOutString, stdErrString) ->
+      case exitCode of
+        SysE.ExitFailure _ ->
+          Left "Failed to get version"
+
+        SysE.ExitSuccess ->
+          case stdOutString of
+            "0.19.0\n" ->
+              Right ElmConfig.V0_19
+
+            _ ->
+              Right ElmConfig.InvalidVersion
+    )
+    (SysP.readProcessWithExitCode
+      (Text.unpack elmExectuablePath)
+      ["--version"]
+      ""
+    )
+
 
 -- ELM EXECTUABLE SEARCH --
 findElmExectuable :: Text -> IO (Either Text Text)
@@ -38,8 +68,10 @@ findElmExectuable projectRoot =
 findElmExectuableHelper :: FilePath -> IO (Either Text Text)
 findElmExectuableHelper !path =
   let
-      localPath = path ++ "node_modules/.bin/elm"
+      localPath = path ++ "/node_modules/.bin/elm"
   in
+  Log.logger path >>
+  Log.logger localPath >>
   Dir.doesFileExist localPath >>= \doesExist ->
     if doesExist then
       localPath
@@ -88,12 +120,15 @@ getElmFiles !source =
   source
     |> Glob.globDir1 (Glob.compile "**/*.elm")
     |> fmap
-        (List.map
-          (\path ->
-            path
-              |> List.stripPrefix source
-              |> Maybe.fromMaybe path
-          )
+        (\filePaths ->
+          filePaths
+            |> List.filter (not . List.isInfixOf "elm-stuff")
+            |> List.map
+                (\path ->
+                  path
+                    |> List.stripPrefix source
+                    |> Maybe.fromMaybe path
+                )
         )
     |> fmap extractDirectories
 

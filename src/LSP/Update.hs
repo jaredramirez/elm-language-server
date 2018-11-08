@@ -15,7 +15,8 @@ import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
-import           LSP.Data.ElmConfig          (ElmConfig)
+import qualified LSP.Data.Error              as Error
+import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
 import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import qualified LSP.Data.FileSystemWatcher  as FileSystemWatcher
@@ -50,28 +51,29 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text ElmConfig
+  = Initialize Text Text Text Text ElmVersion ElmConfig
   | UpdateElmConfig ElmConfig
   | SendDiagnostics URI [Diagnostic]
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
   | SendNotifError Error Text
+  | InvalidElmVersion Text
   | NoOp
   deriving (Show)
 
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable config ->
+    Initialize id projectRoot clonedProjectRoot executable executableVersion config ->
       ( model
           { M._initialized = True
           , M._package =
             Just <|
-              M.Package
-                projectRoot
+              M.Package projectRoot
                 clonedProjectRoot
                 executable
+                executableVersion
                 config
           }
       , SendMany
@@ -151,6 +153,27 @@ update msg model =
         , Send (Message.encode message)
         , ShouldNotTerminate
         )
+
+    InvalidElmVersion id ->
+      ( model
+      , SendMany
+        [ NotifMethod.ShowMessageParams NotifMethod.Info
+          "elm-language-server is only compatible with Elm v0.19.0 and greater"
+          |> NotifMethod.ShowMessage
+          |> Message.NotificationMessage
+          |> (Message.encode :: Message () -> BS.ByteString)
+        , let
+              messageError =
+                MessageError.MessageError
+                  Error.UnknownErrorCode
+                  "elm-language-server is only compatible with Elm v0.19.0 and greater"
+          in
+          Message.ResponseMessage (Just id) Nothing
+            (Just messageError)
+            |> (Message.encode :: Message () -> BS.ByteString)
+        ]
+      , ShouldTerminate
+      )
 
     NoOp ->
       ( model

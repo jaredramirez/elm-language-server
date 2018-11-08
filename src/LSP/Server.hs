@@ -39,6 +39,7 @@ loop model =
         loop model
 
       Right message ->
+        Log.logger ("Message: " ++ show message) >>
         MessageHandler.handler model message >>= \msg ->
           let
               (nextModel, response, termination) =

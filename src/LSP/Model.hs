@@ -13,7 +13,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
-import LSP.Data.ElmConfig (ElmConfig)
+import LSP.Data.ElmConfig (ElmConfig, ElmVersion)
 import LSP.Data.URI (URI)
 import Misc ((<|), (|>))
 import Prelude hiding (init)
@@ -30,6 +30,7 @@ data Package = Package
   { _projectRoot :: Text
   , _clonedProjectRoot :: Text
   , _exectuable :: Text
+  , _exectuableVersion :: ElmVersion
   , _elmConfig :: ElmConfig
   -- TODO: Add elm-format path
   } deriving (Show)

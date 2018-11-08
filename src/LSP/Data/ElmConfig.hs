@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSP.Data.ElmConfig
-    ( ElmConfig(..)
+    ( ElmVersion(..)
+    , ElmConfig(..)
     , parseFromFile
     , getElmSourceDirectories
     ) where
@@ -19,6 +20,13 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Misc ((<|), (|>))
 import qualified Misc
+
+
+data ElmVersion
+  = InvalidVersion
+  | V0_19
+  deriving (Show)
+
 
 data ElmConfig
   = Application

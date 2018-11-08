@@ -14,7 +14,7 @@ logger ::  Show a => a -> IO ()
 logger  message =
   let
       dirPath =
-        "~/.lsp"
+        "./elm-stuff/.lsp"
 
       filePath =
         Text.append dirPath "/debug.log"

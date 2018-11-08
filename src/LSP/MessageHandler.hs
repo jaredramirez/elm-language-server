@@ -13,7 +13,7 @@ import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
 import qualified Data.Maybe                  as Maybe
-import           LSP.Data.ElmConfig          (ElmConfig)
+import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
 import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.Error              as Error
 import qualified LSP.Data.FileEvent          as FileEvent
@@ -39,6 +39,7 @@ import qualified LSP.Update                  as U
 import           Misc                        ((<|), (|>))
 import qualified Misc
 import qualified System.Directory            as Dir
+
 
 handler :: Model -> Message result -> IO Msg
 handler model incomingMessage =
@@ -88,9 +89,13 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
         clonedProjectRoot =
           projectRoot |> M.toCloneProjectRoot
 
-        exectuableTask :: IO (Either Text Text)
-        exectuableTask =
+        getExectuableTask :: IO (Either Text Text)
+        getExectuableTask =
           projectRoot |> LSP.Misc.findElmExectuable
+
+        getElmVersionTask :: Text -> IO (Either Text ElmVersion)
+        getElmVersionTask =
+          LSP.Misc.getElmVersion
 
         cloneElmSrcTask :: ElmConfig -> IO (Either Text ())
         cloneElmSrcTask elmConfig =
@@ -123,12 +128,26 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
                 )
 
         eitherIOMsg =
-          exectuableTask `bindEitherIO` \exectuable ->
-          elmConfigTask projectRoot clonedProjectRoot `bindEitherIO` \elmConfig ->
-          cloneElmSrcTask elmConfig `bindEitherIO` \_ ->
-            U.Initialize id projectRoot clonedProjectRoot exectuable elmConfig
-              |> Right
-              |> return
+          getExectuableTask `bindEitherIO` \exectuable ->
+          getElmVersionTask exectuable `bindEitherIO` \exectuableVersion ->
+            case exectuableVersion of
+              ElmConfig.InvalidVersion ->
+                U.InvalidElmVersion id
+                  |> Right
+                  |> return
+
+              ElmConfig.V0_19 ->
+                elmConfigTask projectRoot clonedProjectRoot `bindEitherIO` \elmConfig ->
+                cloneElmSrcTask elmConfig `bindEitherIO` \_ ->
+                  U.Initialize id
+                    projectRoot
+                    clonedProjectRoot
+                    exectuable
+                    exectuableVersion
+                    elmConfig
+                    |> Right
+                    |> return
+
     in
     eitherIOMsg
       |> fmap

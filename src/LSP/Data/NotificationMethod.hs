@@ -9,12 +9,15 @@ module LSP.Data.NotificationMethod
   , TextDocumentDidSaveParams(..)
   , RegisterCapabilityParams(..)
   , DidChangeWatchedFilesParams(..)
+  , MessageType(..)
+  , ShowMessageParams(..)
   , toPairs
   ) where
 
 import           Data.Aeson            (ToJSON, FromJSON, Value, (.:), (.:?), (.=))
 import qualified Data.Aeson            as A
 import           Data.Aeson.Types      (Parser, Pair)
+import qualified Data.Aeson.Utils      as AUtils
 import qualified Data.ByteString.Lazy  as BS
 import qualified Data.HashMap.Strict   as HM
 import           Data.Text             (Text)
@@ -23,7 +26,7 @@ import           LSP.Data.URI          (URI)
 import           LSP.Data.Range        (Range)
 import           LSP.Data.Diagnostic   (Diagnostic)
 import           LSP.Data.Registration (Registration)
-import           Misc                  ((<|))
+import           Misc                  ((<|), (|>))
 import qualified Misc
 
 -- INITIALIZED --
@@ -154,6 +157,83 @@ instance ToJSON DidChangeWatchedFilesParams where
     A.object [ "changes" .= fileEvents ]
 
 
+-- WINDOW SHOW MESSAGE
+showMessage :: Text
+showMessage = "window/showMessage"
+
+
+data MessageType
+  = Error
+  | Warning
+  | Info
+  | Log
+  deriving (Show)
+
+
+instance FromJSON MessageType where
+  parseJSON =
+    A.withScientific "MessageType" $ \num ->
+      let
+          int_ = num |> AUtils.floatingOrInteger |> Misc.toInt
+      in
+      case int_ of
+        1 ->
+          return Error
+
+        2 ->
+          return Warning
+
+        3 ->
+          return Info
+
+        4 ->
+          return Log
+
+        _ ->
+          fail "Unrecognized file change type"
+
+
+instance ToJSON MessageType where
+  toJSON messageType =
+    let
+        int_ =
+          case messageType of
+            Error ->
+              1
+
+            Warning ->
+              2
+
+            Info ->
+              3
+
+            Log ->
+              4
+    in
+    A.Number int_
+
+
+data ShowMessageParams =
+  ShowMessageParams MessageType Text
+  deriving (Show)
+
+
+instance FromJSON ShowMessageParams where
+  parseJSON =
+    A.withObject "ShowMessageParams" <| \v ->
+      return ShowMessageParams
+        <*> v .: "type"
+        <*> v .: "message"
+
+
+instance ToJSON ShowMessageParams where
+  toJSON (ShowMessageParams type_ message) =
+    A.object
+      [ "type" .= type_
+      , "message" .= message
+      ]
+
+
 -- EXIT --
 exit :: Text
 exit = "exit"
@@ -168,6 +248,7 @@ data NotificationMethod
   | TextDocumentDidSave TextDocumentDidSaveParams
   | RegisterCapability RegisterCapabilityParams
   | DidChangeWatchedFiles DidChangeWatchedFilesParams
+  | ShowMessage ShowMessageParams
   | Exit
   deriving (Show)
 
@@ -180,6 +261,7 @@ decoder v key
   | key == textDocumentDidSave = TextDocumentDidSave <$> v .: "params"
   | key == registerCapability = RegisterCapability <$> v .: "params"
   | key == didChangeWatchedFiles = DidChangeWatchedFiles <$> v .: "params"
+  | key == showMessage = ShowMessage <$> v .: "params"
   | key == exit = return Exit
   | otherwise = fail "Unknown notificaiton method"
 
@@ -214,6 +296,11 @@ toPairs message =
 
     DidChangeWatchedFiles params ->
       [ "method" .= registerCapability
+      , "params" .= params
+      ]
+
+    ShowMessage params ->
+      [ "method" .= showMessage
       , "params" .= params
       ]
 
