@@ -4,7 +4,7 @@ This project implements the [Language Server Protocol](https://microsoft.github.
 
 ## Platforms
 
-Currently this project only supports MacOS. I'm fairly certain that it works on most linux distros and windows as well, but I have not tested on it. This is mostly beacuse I'm not an expert on how cross-compiling works with GHC and haven't tackled the problem yet.
+Currently this project only supports MacOS. I'm fairly certain that it works on most linux distros, but I have not tested on it. This is mostly beacuse I'm not an expert on how cross-compiling works with GHC and haven't tackled the problem yet. I'm not sure how it will work on windows at this point.
 
 ## Installation
 
