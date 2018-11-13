@@ -37,8 +37,8 @@ This project is still in pretty early development, so the feature set is current
 
 ## Future/Contributing
 
-This is actively being developed, so there are many things in the pipeline. The first, and most important thing, is making (or borrowing) an error tolerant parser to get an AST. Once we have that working and integrated, the interesting work of this project can begin (auto-completion, varabile rename, goto defintion, etc). I'm heavily in the research aspect of this stage, looking at the 0.19 parser, the elm-format parser, and some other readings on the topic. If you have any expertise in this area, please reach out to me so I can learn eveything I can to make this as good as possible.
+This is actively being developed, so there are many things in the pipeline. The first, and most important thing, is making (or borrowing) an error tolerant parser to get an AST. Once we have that working and integrated, the interesting work of this project can begin (auto-completion, variable rename, goto defintion, etc). I'm heavily in the research aspect of this stage, looking at the 0.19 parser, the elm-format parser, and some other readings on the topic. If you have any expertise in this area, please reach out to me so I can learn eveything I can to make this as good as possible.
 
-If other's are interested in working on this project as well, that would be great! Please reach out to me (email, twitter) before starting anything so we can avoid working on the same thing and properly plan.
+If others are interested in working on this project as well, that would be great! Please reach out to me (email, twitter) before starting anything so we can avoid working on the same thing and properly plan.
 
 Lastly, this a part-time project for me so if you open an issue or reach out it make take me a few days to get back to you.
