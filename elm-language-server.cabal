@@ -24,21 +24,34 @@ flag dev {
 }
 
 executable elm-language-server-exe
-  if flag(dev)
-    ghc-options: -O0 -Wall -Werror
-  else
-    ghc-options: -O2 -fsimpl-tick-factor=200 -rtsopts
+  ghc-options:
+      -O2 -Wall -Wno-name-shadowing
 
   main-is: Main.hs
 
   hs-source-dirs:
       src
+      parser/src
+      markdown
 
   other-extensions: TemplateHaskell
 
   other-modules:
-      Paths_elm_language_server
       Analyze.Diagnostics
+      AST.Declaration
+      AST.Expression
+      AST.Helpers
+      AST.Json
+      AST.Module
+      AST.Pattern
+      AST.V0_16
+      AST.Variable
+      Cheapskate.Inlines
+      Cheapskate.Parse
+      Cheapskate.ParserCombinators
+      Cheapskate.Types
+      Cheapskate.Util
+      Elm.Utils
       LSP.Data.Capabilities
       LSP.Data.Diagnostic
       LSP.Data.DocumentFilter
@@ -60,11 +73,31 @@ executable elm-language-server-exe
       LSP.Data.TextDocumentIdentifier
       LSP.Data.URI
       LSP.MessageHandler
-      LSP.Misc
-      LSP.Model
+      LSP.Misc LSP.Model
       LSP.Server
       LSP.Update
       Misc
+      Paths_elm_language_server
+      Parse.Binop
+      Parse.Common
+      Parse.Comments
+      Parse.Declaration
+      Parse.Expression
+      Parse.Helpers
+      Parse.IParser
+      Parse.Literal
+      Parse.Markdown
+      Parse.Module
+      Parse.Pattern
+      Parse.Parse
+      Parse.State
+      Parse.Type
+      Parse.Whitespace
+      Reporting.Annotation
+      Reporting.Error.Syntax
+      Reporting.Region
+      Reporting.Report
+      Reporting.Result
 
   build-depends:
       base >=4.8 && <5
@@ -76,7 +109,9 @@ executable elm-language-server-exe
     , directory >=1.2.3.0 && <2.0
     , filepath >=1 && <2.0
     , hashable
+    , json >= 0.9.1 && < 0.10
     , process
+    , parsec >= 3.1.11 && < 4
     , Glob
     , text >=1 && <2
     , unordered-containers
