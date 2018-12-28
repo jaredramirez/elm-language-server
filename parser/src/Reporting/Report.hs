@@ -4,14 +4,11 @@ module Reporting.Report
     ( Report(Report)
     , simple
     , toString
-    , printError, printWarning
     ) where
 
 import Control.Applicative ((<|>))
 import Control.Monad.Writer (Writer, execWriter, tell)
 import qualified Data.List.Split as Split
-import System.Console.ANSI
-import ElmFormat.World
 
 import qualified Reporting.Region as R
 
@@ -33,16 +30,6 @@ simple title pre post =
 toString :: String -> R.Region -> Report -> String -> String
 toString location region report source =
   execWriter (render plain location region report source)
-
-
-printError :: World m => String -> R.Region -> Report -> String -> m ()
-printError location region report source =
-  render (ansi Error) location region report source
-
-
-printWarning :: World m => String -> R.Region -> Report -> String -> m ()
-printWarning location region report source =
-  render (ansi Warning) location region report source
 
 
 render
@@ -72,33 +59,6 @@ data Renderer m = Renderer
 plain :: Renderer (Writer String)
 plain =
   Renderer tell tell tell
-
-
-data Type = Error | Warning
-
-
-ansi :: World m => Type -> Renderer m
-ansi tipe =
-  let
-    put =
-      putStrStderr
-
-    put' intensity color string =
-      do  putSgrStderr [SetColor Foreground intensity color]
-          put string
-          putSgrStderr [Reset]
-
-    accentColor =
-      case tipe of
-        Error -> Red
-        Warning -> Yellow
-  in
-    Renderer
-      put
-      (put' Dull Cyan)
-      (put' Dull accentColor)
-
-
 
 
 -- REPORT HEADER

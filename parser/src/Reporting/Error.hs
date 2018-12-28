@@ -39,11 +39,6 @@ toString location source (A.A region err) =
   Report.toString location region (toReport err) source
 
 
-print :: String -> String -> A.Located Error -> IO ()
-print location source (A.A region err) =
-  Report.printError location region (toReport err) source
-
-
 -- TO JSON
 
 toJson :: FilePath -> A.Located Error -> Json.Value

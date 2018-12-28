@@ -6,23 +6,14 @@ module LSP.Server
 
 import           Control.Exception           (SomeException, catch)
 import qualified Data.ByteString.Lazy        as BS
-import qualified Data.Map.Strict             as Map
-import           Data.Semigroup              ((<>))
-import qualified Data.Text                   as Text
 import qualified Data.List                   as List
 import qualified LSP.Data.Message            as Message
-import qualified LSP.Data.NotificationMethod as NotificationMethod
-import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Log                     as Log
 import           LSP.Model                   (Model)
-import qualified LSP.Model                   as M
 import qualified LSP.Update                  as U
 import qualified LSP.MessageHandler          as MessageHandler
-import           Misc                        ((|>))
-import qualified Misc
-import qualified System.Directory            as Dir
 import qualified System.IO                   as IO
-import qualified AST.Json                    as J
+import qualified Parse.Parse                 as P
 
 run :: IO Int
 run =
@@ -36,7 +27,7 @@ loop :: Model -> IO Int
 loop model =
   Message.decode IO.stdin >>= \decoded ->
     case decoded of
-      Left error ->
+      Left _ ->
         loop model
 
       Right message ->
