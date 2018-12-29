@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSP.Data.ElmConfig
+module Analyze.Data.ElmConfig
     ( ElmVersion(..)
     , ElmConfig(..)
     , parseFromFile
@@ -8,7 +8,6 @@ module LSP.Data.ElmConfig
     ) where
 
 import Control.Applicative ((<|>))
-import Data.Semigroup ((<>))
 import Data.Aeson (FromJSON, Value, (.:), (.:?))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
@@ -18,7 +17,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Misc ((<|), (|>))
+import Misc ((|>))
 import qualified Misc
 
 
@@ -73,9 +72,13 @@ parseDependencies dependencyType v =
       return (Nothing, Nothing)
 
     Just depMap ->
-      return (,)
-        <*> v .:? "direct"
-        <*> v .:? "indirect"
+      A.withObject "dependencies"
+        (\subV ->
+          return (,)
+            <*> subV .:? "direct"
+            <*> subV .:? "indirect"
+        )
+        depMap
 
 
 parseApplication :: HashMap Text Value -> Parser ElmConfig

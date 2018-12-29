@@ -12,7 +12,7 @@ import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
-import LSP.Data.ElmConfig (ElmConfig, ElmVersion)
+import Analyze.Data.ElmConfig (ElmConfig, ElmVersion)
 import LSP.Data.URI (URI)
 import AST.Module (Module)
 import Misc ((|>))

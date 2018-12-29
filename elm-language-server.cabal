@@ -37,7 +37,10 @@ executable elm-language-server-exe
   other-extensions: TemplateHaskell
 
   other-modules:
+      Analyze.Data.Documentation
       Analyze.Diagnostics
+      Analyze.Data.ElmConfig
+      Analyze.Oracle
       AST.Declaration
       AST.Expression
       AST.Helpers
@@ -57,7 +60,6 @@ executable elm-language-server-exe
       LSP.Data.DocumentFilter
       LSP.Data.DocumentSelector
       LSP.Data.Error
-      LSP.Data.ElmConfig
       LSP.Data.FileChangeType
       LSP.Data.FileEvent
       LSP.Data.FileSystemWatcher
@@ -119,6 +121,7 @@ executable elm-language-server-exe
     , text >=1 && <2
     , unordered-containers
     , utf8-string
+    , vector
 
   default-language: Haskell2010
 

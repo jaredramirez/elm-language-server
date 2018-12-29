@@ -8,6 +8,7 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
+import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
 import           AST.Module                  (Module)
 import qualified Data.ByteString.Lazy        as BS
 import qualified Data.HashMap.Strict         as HM
@@ -16,8 +17,6 @@ import           Data.Text                   (Text)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
 import qualified LSP.Data.Error              as Error
-import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
-import qualified LSP.Data.FileChangeType     as FileChangeType
 import qualified LSP.Data.FileSystemWatcher  as FileSystemWatcher
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
@@ -25,6 +24,7 @@ import qualified LSP.Data.Registration       as Registration
 import           LSP.Data.Diagnostic         (Diagnostic)
 import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
+import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.URI                (URI)
 import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M

@@ -5,12 +5,12 @@ module LSP.MessageHandler
   ) where
 
 import qualified Analyze.Diagnostics         as Diagnostics
+import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
+import qualified Analyze.Data.ElmConfig      as ElmConfig
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
-import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
-import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.Error              as Error
 import qualified LSP.Data.FileEvent          as FileEvent
 import qualified LSP.Data.FileChangeType     as FileChangeType

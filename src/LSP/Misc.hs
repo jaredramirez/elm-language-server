@@ -10,6 +10,8 @@ module LSP.Misc
   , getElmVersion
   ) where
 
+import           Analyze.Data.ElmConfig   (ElmVersion)
+import qualified Analyze.Data.ElmConfig   as ElmConfig
 import           Control.Exception        (SomeException, catch, tryJust)
 import           Data.List                ((\\))
 import qualified Data.List                as List
@@ -18,8 +20,6 @@ import qualified Data.HashMap.Strict      as HM
 import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
-import           LSP.Data.ElmConfig       (ElmVersion)
-import qualified LSP.Data.ElmConfig       as ElmConfig
 import qualified LSP.Log                  as Log
 import           Misc                     ((<|), (|>), mapLeft)
 import qualified System.Directory         as Dir
