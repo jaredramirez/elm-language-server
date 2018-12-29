@@ -8,29 +8,24 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import           Data.Aeson                  ((.=))
-import qualified Data.Aeson                  as A
+import           AST.Module                  (Module)
 import qualified Data.ByteString.Lazy        as BS
+import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
 import qualified LSP.Data.Error              as Error
 import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
-import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import qualified LSP.Data.FileSystemWatcher  as FileSystemWatcher
 import           LSP.Data.Message            (Message)
 import qualified LSP.Data.Message            as Message
-import           LSP.Data.Registration       (Registration)
 import qualified LSP.Data.Registration       as Registration
 import           LSP.Data.Diagnostic         (Diagnostic)
-import qualified LSP.Data.Diagnostic         as Diagnostic
-import           LSP.Data.MessageError       (MessageError)
 import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
 import           LSP.Data.URI                (URI)
-import qualified LSP.Data.URI                as URI
 import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           Misc                        ((<|), (|>))
@@ -53,6 +48,7 @@ data ShouldTermiate
 data Msg
   = Initialize Text Text Text Text ElmVersion ElmConfig
   | UpdateElmConfig ElmConfig
+  | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
   | SendDiagnostics URI [Diagnostic]
   | RequestShutDown
   | Exit
@@ -75,6 +71,7 @@ update msg model =
                 executable
                 executableVersion
                 config
+                HM.empty
           }
       , SendMany
         [ Message.encode
@@ -109,17 +106,41 @@ update msg model =
       , ShouldNotTerminate
       )
 
+    SetASTAndSendDiagnostics uri maybeAST diagnostics ->
+      ( model
+        { M._package =
+            model
+              |> M._package
+              |> fmap
+                (\package ->
+                  package
+                    { M._ASTs =
+                      package
+                        |> M._ASTs
+                        |> HM.alter
+                          (\maybeExisting ->
+                            case maybeAST of
+                              Nothing ->
+                                maybeExisting
+
+                              Just ast ->
+                                Just ast
+                          )
+                          uri
+                    }
+                )
+        }
+      , (uri, diagnostics)
+          |> encodeDiagnostics
+          |> Send
+      , ShouldNotTerminate
+      )
+
     SendDiagnostics uri diagnostics ->
       ( model
-      , let encode :: Message () -> BS.ByteString
-            encode = Message.encode
-          in
-          (uri, diagnostics)
-            |> NotifMethod.PublishDiagnosticsParams
-            |> NotifMethod.PublishDiagnostics
-            |> Message.NotificationMessage
-            |> encode
-            |> Send
+      , (uri, diagnostics)
+          |> encodeDiagnostics
+          |> Send
       , ShouldNotTerminate
       )
 
@@ -180,3 +201,14 @@ update msg model =
       , None
       , ShouldNotTerminate
       )
+
+encodeDiagnostics :: (URI, [Diagnostic]) -> BS.ByteString
+encodeDiagnostics tuple =
+    let encode :: Message () -> BS.ByteString
+        encode = Message.encode
+    in
+    tuple
+      |> NotifMethod.PublishDiagnosticsParams
+      |> NotifMethod.PublishDiagnostics
+      |> Message.NotificationMessage
+      |> encode

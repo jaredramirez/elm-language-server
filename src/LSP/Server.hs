@@ -13,7 +13,6 @@ import           LSP.Model                   (Model)
 import qualified LSP.Update                  as U
 import qualified LSP.MessageHandler          as MessageHandler
 import qualified System.IO                   as IO
-import qualified Parse.Parse                 as P
 
 run :: IO Int
 run =

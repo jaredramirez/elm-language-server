@@ -5,14 +5,10 @@ module LSP.MessageHandler
   ) where
 
 import qualified Analyze.Diagnostics         as Diagnostics
-import           Data.Aeson                  (Value)
-import qualified Data.Aeson                  as A
-import qualified Data.ByteString.Lazy        as BS
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.List                   as List
-import qualified Data.Maybe                  as Maybe
 import           LSP.Data.ElmConfig          (ElmVersion, ElmConfig)
 import qualified LSP.Data.ElmConfig          as ElmConfig
 import qualified LSP.Data.Error              as Error
@@ -30,14 +26,15 @@ import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Data.URI                as URI
 import           LSP.Data.Diagnostic         (Diagnostic)
-import qualified LSP.Log                     as Log
 import qualified LSP.Misc
 import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           LSP.Update                  (Msg)
 import qualified LSP.Update                  as U
-import           Misc                        ((<|), (|>))
+import           Misc                        ((|>))
 import qualified Misc
+import qualified Parse.Parse                 as P
+import qualified Reporting.Result            as R
 import qualified System.Directory            as Dir
 
 
@@ -164,7 +161,14 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
 textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
 textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, version, document)) =
     let
-        (URI.URI filePath) = uri
+        (URI.URI filePath) =
+          uri
+
+        maybeModule =
+          document
+            |> Text.unpack
+            |> P.parseModule
+            |> R.toMaybe
 
         eitherIOMsg =
           createOrGetFileCloneTask model filePath `bindEitherIO` \createFilePath ->
@@ -178,7 +182,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
               U.SendNotifError Error.InternalError error
 
             Right diagnostics ->
-              U.SendDiagnostics uri diagnostics
+              U.SetASTAndSendDiagnostics uri maybeModule diagnostics
         )
 
 
@@ -193,20 +197,28 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
             |> List.reverse
             |> Misc.headSafe
 
+
         eitherIOMsg =
           case lastContentChange of
             Nothing ->
               return (Left "No document changes received")
 
-            Just head ->
+            Just contentChanges ->
               let
                   (NotificationMethod.ContentChange actualContentChanges) =
-                    head
+                    contentChanges
+
+                  maybeModule =
+                    actualContentChanges
+                      |> Text.unpack
+                      |> P.parseModule
+                      |> R.toMaybe
+
               in
               createOrGetFileCloneTask model filePath `bindEitherIO` \clonedFilePath ->
               updateFileContentsTask clonedFilePath actualContentChanges `bindEitherIO` \() ->
               diagnosticsTask model clonedFilePath `bindEitherIO` \diagnostics ->
-                return (Right diagnostics)
+                return (Right (maybeModule, diagnostics))
     in
     eitherIOMsg
       |> fmap
@@ -215,8 +227,8 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
               Left errorMessage ->
                 U.SendNotifError Error.InvalidParams errorMessage
 
-              Right diagnostics ->
-                U.SendDiagnostics uri diagnostics
+              Right (maybeModule, diagnostics) ->
+                U.SetASTAndSendDiagnostics uri maybeModule diagnostics
           )
 
 

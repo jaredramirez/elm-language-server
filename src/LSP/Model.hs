@@ -9,13 +9,13 @@ module LSP.Model
   ) where
 
 import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
 import LSP.Data.ElmConfig (ElmConfig, ElmVersion)
 import LSP.Data.URI (URI)
-import Misc ((<|), (|>))
+import AST.Module (Module)
+import Misc ((|>))
 import Prelude hiding (init)
 
 
@@ -32,6 +32,7 @@ data Package = Package
   , _exectuable :: Text
   , _exectuableVersion :: ElmVersion
   , _elmConfig :: ElmConfig
+  , _ASTs :: HashMap URI Module
   -- TODO: Add elm-format path
   } deriving (Show)
 
