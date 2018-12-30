@@ -51,7 +51,7 @@ loop model =
           Log.logger ("Msg: " ++ show msg) >>
           Log.logger ("Response: " ++ show response) >>
           Log.logger ("Termination: " ++ show termination) >>
-          Log.logger "" >>
+          Log.logger ("" :: String) >>
             case termination of
               U.ShouldTerminate ->
                 return 1

@@ -7,11 +7,16 @@ module LSP.MessageHandler
 import qualified Analyze.Diagnostics         as Diagnostics
 import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
 import qualified Analyze.Data.ElmConfig      as ElmConfig
+import           Analyze.Data.Documentation  (Documentation, ModuleName)
+import qualified Analyze.Data.Documentation  as Documentation
+import qualified Analyze.Oracle              as Oracle
+import qualified LSP.Data.Error              as Error
+import qualified Data.List                   as List
+import           Data.HashMap.Strict         (HashMap)
+import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
-import qualified Data.List                   as List
-import qualified LSP.Data.Error              as Error
 import qualified LSP.Data.FileEvent          as FileEvent
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.Message            (Message)
@@ -94,36 +99,6 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
         getElmVersionTask =
           LSP.Misc.getElmVersion
 
-        cloneElmSrcTask :: ElmConfig -> IO (Either Text ())
-        cloneElmSrcTask elmConfig =
-          let
-              sourceDirectories =
-                elmConfig
-                  |> ElmConfig.getElmSourceDirectories
-                  |> (\list ->
-                        if List.null list then
-                          ["."]
-
-                        else
-                          list
-                     )
-          in
-          sequence
-            (List.map
-              (\path ->
-                LSP.Misc.copyElmFileTree
-                  (clonedProjectRoot <> "/" <> path)
-                  path
-              )
-              sourceDirectories
-            ) >>=
-            \listOfEithers ->
-              return
-                (listOfEithers
-                  |> sequence
-                  |> fmap (\_ -> ())
-                )
-
         eitherIOMsg =
           getExectuableTask `bindEitherIO` \exectuable ->
           getElmVersionTask exectuable `bindEitherIO` \exectuableVersion ->
@@ -135,13 +110,15 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
 
               ElmConfig.V0_19 ->
                 elmConfigTask projectRoot clonedProjectRoot `bindEitherIO` \elmConfig ->
-                cloneElmSrcTask elmConfig `bindEitherIO` \_ ->
+                cloneElmSrcTask elmConfig clonedProjectRoot `bindEitherIO` \_ ->
+                elmDocumentationTask elmConfig `bindEitherIO` \docs ->
                   U.Initialize id
                     projectRoot
                     clonedProjectRoot
                     exectuable
                     exectuableVersion
                     elmConfig
+                    docs
                     |> Right
                     |> return
 
@@ -159,7 +136,7 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
 
 
 textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
-textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, version, document)) =
+textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, document)) =
     let
         (URI.URI filePath) =
           uri
@@ -187,7 +164,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
 
 
 textDocumentDidChangeHandler:: Model -> TextDocumentDidChangeParams -> IO Msg
-textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangeParams (uri, version, contentChanges)) =
+textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangeParams (uri, _version, contentChanges)) =
     let
         (URI.URI filePath) =
           uri
@@ -298,6 +275,33 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
 
 -- TASKS
 
+
+-- This task clones the elm source to a cloned directory.
+-- We do this so we can save chages to the clone and provide
+-- as-you-type diagnostics to the user
+cloneElmSrcTask :: ElmConfig -> Text -> IO (Either Text ())
+cloneElmSrcTask elmConfig clonedProjectRoot =
+  let
+      sourceDirectories =
+        ElmConfig.getElmSourceDirectories elmConfig
+  in
+  sequence
+    (List.map
+      (\path ->
+        LSP.Misc.copyElmFileTree
+          (clonedProjectRoot <> "/" <> path)
+          path
+      )
+      sourceDirectories
+    ) >>=
+    \listOfEithers ->
+      return
+        (listOfEithers
+          |> sequence
+          |> fmap (\_ -> ())
+        )
+
+
 -- This task runs the elm compiler with the flag `--report=json` on
 -- the given file and parses the results
 diagnosticsTask :: Model -> Text -> IO (Either Text [Diagnostic])
@@ -372,6 +376,14 @@ elmConfigTask projectRoot clonedRoot =
     Dir.createDirectoryIfMissing True clonedRootString >>
     Dir.copyFile elmConfigPathString clonedElmConfigPathString >>
     return (Right elmConfig)
+
+
+-- This task read and parses all documentation of 3rd party modules (direct dependencies)
+elmDocumentationTask :: ElmConfig -> IO (Either Text (HashMap ModuleName Documentation))
+elmDocumentationTask elmConfig =
+  elmConfig
+    |> ElmConfig.getElmDependencies
+    |> Documentation.readDocumentationFromDependencies
 
 
 -- HELPERS

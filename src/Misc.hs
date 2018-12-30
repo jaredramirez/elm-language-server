@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Misc
-  ( (|>)
+  ( isWindows
+  , (|>)
   , (<|)
   , headSafe
   , curryTriple
@@ -19,6 +20,7 @@ import qualified Data.Char            as Char
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as TextEncode
 import           Data.Word            (Word8)
+import           System.Info          as SysInfo
 
 
 (|>) :: a -> (a -> b) -> b
@@ -27,6 +29,11 @@ import           Data.Word            (Word8)
 
 (<|) :: (a -> b) -> a -> b
 (<|) = ($)
+
+
+isWindows :: Bool
+isWindows  =
+  SysInfo.os == "mingw32"
 
 
 headSafe :: [a] -> Maybe a

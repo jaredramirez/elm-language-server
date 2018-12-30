@@ -8,9 +8,11 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
+import           Analyze.Data.Documentation  (Documentation, ModuleName)
 import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
 import           AST.Module                  (Module)
 import qualified Data.ByteString.Lazy        as BS
+import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
@@ -46,7 +48,7 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text ElmVersion ElmConfig
+  = Initialize Text Text Text Text ElmVersion ElmConfig (HashMap ModuleName Documentation)
   | UpdateElmConfig ElmConfig
   | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
   | SendDiagnostics URI [Diagnostic]
@@ -61,7 +63,7 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable executableVersion config ->
+    Initialize id projectRoot clonedProjectRoot executable executableVersion config docs ->
       ( model
           { M._initialized = True
           , M._package =
@@ -72,6 +74,7 @@ update msg model =
                 executableVersion
                 config
                 HM.empty
+                docs
           }
       , SendMany
         [ Message.encode

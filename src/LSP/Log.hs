@@ -4,13 +4,11 @@ module LSP.Log
   ( logger
   ) where
 
-import           Data.Text        (Text)
 import qualified Data.Text        as Text
 import qualified System.Directory as Dir
-import           System.IO        (Handle)
 import qualified System.IO        as IO
 
-logger ::  Show a => a -> IO ()
+logger :: Show a => a -> IO ()
 logger  message =
   let
       dirPath =

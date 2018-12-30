@@ -8,11 +8,12 @@ module LSP.Model
   , switchProjectRootWithClonedProjectRoot
   ) where
 
+import Analyze.Data.Documentation (Documentation, ModuleName)
+import Analyze.Data.ElmConfig (ElmConfig, ElmVersion)
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
-import Analyze.Data.ElmConfig (ElmConfig, ElmVersion)
 import LSP.Data.URI (URI)
 import AST.Module (Module)
 import Misc ((|>))
@@ -33,6 +34,7 @@ data Package = Package
   , _exectuableVersion :: ElmVersion
   , _elmConfig :: ElmConfig
   , _ASTs :: HashMap URI Module
+  , _documentation :: HashMap ModuleName Documentation
   -- TODO: Add elm-format path
   } deriving (Show)
 
