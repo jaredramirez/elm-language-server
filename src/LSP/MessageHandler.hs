@@ -27,6 +27,7 @@ import           LSP.Data.NotificationMethod ( TextDocumentDidOpenParams
                                              , DidChangeWatchedFilesParams
                                              )
 import qualified LSP.Data.NotificationMethod as NotificationMethod
+import qualified LSP.Data.Position           as Position
 import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Data.URI                as URI
@@ -68,6 +69,10 @@ handler model incomingMessage =
 
     (True, Message.NotificationMessage (NotificationMethod.DidChangeWatchedFiles params)) ->
       didChangeWatchedFiles model params
+
+    (True, Message.RequestMessage id (RequestMethod.TextDocumentHover params)) ->
+      U.RequestShutDown
+        |> return
 
     (True, Message.RequestMessage _ RequestMethod.Shutdown) ->
       U.RequestShutDown
@@ -212,7 +217,8 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
 textDocumentDidSaveHandler :: Model -> TextDocumentDidSaveParams -> IO Msg
 textDocumentDidSaveHandler model (NotificationMethod.TextDocumentDidSaveParams uri) =
     let
-        (URI.URI filePath) = uri
+        (URI.URI filePath) =
+          uri
     in
     diagnosticsTask model filePath
       |> fmap
@@ -233,7 +239,8 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
         List.foldl
           (\acc cur@(FileEvent.FileEvent uri changeType)  ->
             let
-                (URI.URI filePath) = uri
+                (URI.URI filePath) =
+                  uri
             in
             if Text.isSuffixOf M.elmConfigFileName filePath then
               case changeType of
@@ -271,6 +278,30 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
           U.UpdateElmConfig elmConfig
     )
     task
+
+
+hover :: Text -> Model -> RequestMethod.TextDocumentHoverParams -> Msg
+hover id model (RequestMethod.TextDocumentHoverParams (uri, position)) =
+  let
+      (URI.URI filePath) =
+        uri
+
+      maybeClonedFilePath =
+        M.switchProjectRootWithClonedProjectRoot
+          model
+          filePath
+
+      (Position.Position (line, character)) =
+        position
+  in
+  case maybeClonedFilePath of
+    Nothing ->
+      U.SendRequestError id Error.InternalError "Package not initialized"
+
+    Just clonedFilePath ->
+      -- TODO: Search for reference with Oracle.hs
+      U.SendRequestError id Error.InternalError "Package not initialized"
+
 
 
 -- TASKS

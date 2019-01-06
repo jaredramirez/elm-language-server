@@ -38,8 +38,9 @@ executable elm-language-server-exe
 
   other-modules:
       Analyze.Data.Documentation
-      Analyze.Diagnostics
       Analyze.Data.ElmConfig
+      Analyze.Data.Reference
+      Analyze.Diagnostics
       Analyze.Oracle
       AST.Declaration
       AST.Expression

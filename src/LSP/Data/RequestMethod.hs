@@ -7,10 +7,9 @@ module LSP.Data.RequestMethod
   , toPairs
   ) where
 
-import           Data.Aeson                      (ToJSON, FromJSON, Value, (.:), (.=))
+import           Data.Aeson                      (FromJSON, Value, (.:), (.=))
 import qualified Data.Aeson                      as A
 import           Data.Aeson.Types                (Parser, Pair)
-import qualified Data.ByteString.Lazy            as BS
 import qualified Data.HashMap.Strict             as HM
 import           Data.Text                       (Text)
 import           LSP.Data.Position               (Position)
@@ -35,13 +34,15 @@ textDocumentHover :: Text
 textDocumentHover = "textDocument/hover"
 
 newtype TextDocumentHoverParams =
-  TextDocumentHoverParams (TextDocumentIdentifier, Position)
+  TextDocumentHoverParams (URI, Position)
   deriving (Show)
 
 instance FromJSON TextDocumentHoverParams where
   parseJSON =
     A.withObject "TextDocumentHoverParams" <| \v ->
-      curry TextDocumentHoverParams <$> v .: "textDocument" <*> v .: "position"
+      return (curry TextDocumentHoverParams)
+        <*> (v .: "textDocument" >>= \subV -> subV .: "uri")
+        <*> v .: "position"
 
 -- SHUTDOWN --
 shutdown :: Text

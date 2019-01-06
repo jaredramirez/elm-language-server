@@ -8,7 +8,7 @@ module LSP.Data.Message
   ) where
 
 import           Control.Applicative         ((<|>))
-import           Data.Aeson                  (FromJSON, ToJSON, Value, (.:), (.:?), (.:!), (.=))
+import           Data.Aeson                  (FromJSON, ToJSON, Value, (.:), (.:!), (.=))
 import qualified Data.Aeson                  as A
 import           Data.Aeson.Types            (Parser)
 import qualified Data.Aeson.Utils            as AUtils
@@ -25,7 +25,7 @@ import           LSP.Data.NotificationMethod (NotificationMethod)
 import qualified LSP.Data.NotificationMethod as NotificationMethod
 import           LSP.Data.RequestMethod      (RequestMethod)
 import qualified LSP.Data.RequestMethod      as RequestMethod
-import           Misc                        ((<|), (|>))
+import           Misc                        ((|>))
 import qualified Misc
 import           System.IO                   (Handle)
 import qualified System.IO                   as IO
@@ -75,7 +75,6 @@ notificationMessageDecoder v =
 responseMessageDecoder :: FromJSON result => HM.HashMap Text Value -> Parser (Message result)
 responseMessageDecoder v =
   let id = HM.lookup "id" v
-      result = HM.lookup "result" v
       finish maybeId =
         ResponseMessage maybeId <$> v .:! "result" <*> v .:! "error"
   in case id of
@@ -100,7 +99,7 @@ instance FromJSON result => FromJSON (Message result) where
       <|> responseMessageDecoder v
 
 decode :: Handle ->  IO (Either String (Message Value))
-decode handle  =
+decode handle =
   getLineBSLazy >>= \header ->
     getLineBSLazy >>= \endLine ->
       let eitherContentLength =
