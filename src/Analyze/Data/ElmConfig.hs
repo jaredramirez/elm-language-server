@@ -10,11 +10,12 @@ module Analyze.Data.ElmConfig
   , parseFromFile
   , getElmSourceDirectories
   , getElmDependencies
+  , getName
   ) where
 
 
 import Control.Applicative ((<|>))
-import Data.Aeson (FromJSON, FromJSONKey, Value, (.:))
+import Data.Aeson (FromJSON, FromJSONKey, Object, (.:))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy as BS
@@ -24,6 +25,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Elm.Package as Pkg
 import Misc ((|>))
 import qualified Misc
 import qualified Text.Parsec as P
@@ -123,7 +125,8 @@ instance FromJSON DependencyName where
 
 data ElmConfig
   = Application
-    { appSourceDirectories :: [Text]
+    { appName :: Pkg.Name
+    , appSourceDirectories :: [Text]
     , appElmVersion :: Text
     , appDirectDependencies :: HashMap DependencyName ExactVersion
     , appIndirectDependencies :: HashMap DependencyName ExactVersion
@@ -131,7 +134,7 @@ data ElmConfig
     , appIndirectTestDependencies :: HashMap DependencyName ExactVersion
     }
   | Package
-    { pkgName :: Text
+    { pkgName :: Pkg.Name
     , pkgSummary :: Text
     , pkgLicense :: Text
     , pkgVersion :: Text
@@ -143,12 +146,9 @@ data ElmConfig
     deriving (Show)
 
 
-parseApplication :: HashMap Text Value -> Parser ElmConfig
+parseApplication :: Object -> Parser ElmConfig
 parseApplication v =
-  let make sourceDirectories elmVersion directDeps indirectDeps directTestDeps indirectTestDeps =
-        Application sourceDirectories elmVersion directDeps indirectDeps directTestDeps indirectTestDeps
-  in
-  return make
+  return (Application Pkg.dummyName)
     <*> v .: "source-directories"
     <*> v .: "elm-version"
     <*> (v .: "dependencies" >>= \subV -> subV .: "direct")
@@ -157,7 +157,7 @@ parseApplication v =
     <*> (v .: "test-dependencies" >>= \subV -> subV .: "indirect")
 
 
-parseExposedModules :: HashMap Text Value -> Parser [Text]
+parseExposedModules :: Object -> Parser [Text]
 parseExposedModules v =
   let
       key =
@@ -174,10 +174,10 @@ parseExposedModules v =
   in list <|> map
 
 
-parsePackage :: HashMap Text Value -> Parser ElmConfig
+parsePackage :: Object -> Parser ElmConfig
 parsePackage v =
   return Package
-    <*> v .: "name"
+    <*> parsePackageName v
     <*> v .: "summary"
     <*> v .: "license"
     <*> v .: "version"
@@ -185,6 +185,18 @@ parsePackage v =
     <*> v .: "elm-version"
     <*> v .: "dependencies"
     <*> v .: "test-dependencies"
+
+
+parsePackageName :: Object -> Parser Pkg.Name
+parsePackageName object =
+  (object .: "name") >>=
+    \text ->
+      case Pkg.fromText text of
+        Left (message, _) ->
+          fail message
+
+        Right name ->
+          return name
 
 
 instance FromJSON ElmConfig where
@@ -225,6 +237,16 @@ getElmDependencies config =
 
     Package {pkgDependencies = deps} ->
       HM.map (\(Range lowerVersion _) -> lowerVersion) deps
+
+
+getName :: ElmConfig -> Pkg.Name
+getName config =
+  case config of
+    Application {appName = name} ->
+      name
+
+    Package {pkgName = name} ->
+      name
 
 
 parseFromFile :: Text -> IO (Either Text ElmConfig)

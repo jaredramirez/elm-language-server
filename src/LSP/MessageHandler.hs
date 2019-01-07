@@ -9,7 +9,7 @@ import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
 import qualified Analyze.Data.ElmConfig      as ElmConfig
 import           Analyze.Data.Documentation  (Documentation, ModuleName)
 import qualified Analyze.Data.Documentation  as Documentation
-import qualified Analyze.Oracle              as Oracle
+-- import qualified Analyze.Oracle              as Oracle
 import qualified LSP.Data.Error              as Error
 import qualified Data.List                   as List
 import           Data.HashMap.Strict         (HashMap)
@@ -17,6 +17,7 @@ import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
+import qualified Data.Text.Encoding          as TextEncode
 import qualified LSP.Data.FileEvent          as FileEvent
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.Message            (Message)
@@ -147,10 +148,7 @@ textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (
           uri
 
         maybeModule =
-          document
-            |> Text.unpack
-            |> P.parseModule
-            |> R.toMaybe
+          decodeModule model document
 
         eitherIOMsg =
           createOrGetFileCloneTask model filePath `bindEitherIO` \createFilePath ->
@@ -191,10 +189,7 @@ textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangePara
                     contentChanges
 
                   maybeModule =
-                    actualContentChanges
-                      |> Text.unpack
-                      |> P.parseModule
-                      |> R.toMaybe
+                    decodeModule model actualContentChanges
 
               in
               createOrGetFileCloneTask model filePath `bindEitherIO` \clonedFilePath ->
@@ -415,6 +410,24 @@ elmDocumentationTask elmConfig =
   elmConfig
     |> ElmConfig.getElmDependencies
     |> Documentation.readDocumentationFromDependencies
+
+
+-- Decode a module
+decodeModule :: Model -> Text -> Maybe M.Module
+decodeModule model document =
+  let
+      byteString =
+        TextEncode.encodeUtf8 document
+
+      maybeName =
+        model
+          |> M._package
+          |> fmap (ElmConfig.getName . M._elmConfig)
+  in
+  maybeName
+    |> fmap (\name -> P.module_ name byteString)
+    |> Misc.andThen Misc.eitherToMaybe
+
 
 
 -- HELPERS

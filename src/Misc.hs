@@ -7,7 +7,9 @@ module Misc
   , headSafe
   , curryTriple
   , mapLeft
+  , eitherToMaybe
   , maybeToEither
+  , map2
   , andThen
   , toInt
   , byteStringToText
@@ -57,11 +59,28 @@ mapLeft func either =
     Right e -> Right e
 
 
+eitherToMaybe :: Either error value -> Maybe value
+eitherToMaybe either =
+  case either of
+    Left _ ->
+      Nothing
+
+    Right value ->
+      Just value
+
+
 maybeToEither :: error -> Maybe value -> Either error value
 maybeToEither error maybe =
   case maybe of
     Nothing    -> Left error
     Just value -> Right value
+
+
+map2 :: Monad m => (a -> b -> result) -> m a -> m b -> m result
+map2 func a b =
+  return func
+    <*> a
+    <*> b
 
 
 andThen :: Monad m => (a -> m b) -> m a -> m b

@@ -23,6 +23,85 @@ flag dev {
   default: False
 }
 
+library
+  hs-source-dirs:
+      elm-compiler/src
+
+  exposed-modules:
+      Elm.Name
+      Elm.Package
+      Parse.Parse
+      Reporting.Result
+      Reporting.Error
+      Reporting.Error.Syntax
+      Reporting.Region
+      AST.Valid
+      AST.Source
+
+  other-modules:
+      AST.Canonical
+      AST.Module.Name
+      AST.Optimized
+      AST.Utils.Binop
+      AST.Utils.Shader
+      AST.Utils.Type
+      Data.Index
+      Elm.Compiler.Imports
+      Elm.Version
+      Json.Decode
+      Json.Decode.Error
+      Json.Decode.Internals
+      Json.Encode
+      Optimize.DecisionTree
+      Parse.Declaration
+      Parse.Expression
+      Parse.Module
+      Parse.Pattern
+      Parse.Primitives
+      Parse.Primitives.Internals
+      Parse.Primitives.Kernel
+      Parse.Primitives.Keyword
+      Parse.Primitives.Number
+      Parse.Primitives.Shader
+      Parse.Primitives.Symbol
+      Parse.Primitives.Utf8
+      Parse.Primitives.Variable
+      Parse.Primitives.Whitespace
+      Parse.Repl
+      Parse.Shader
+      Parse.Type
+      Reporting.Annotation
+      Reporting.Doc
+      Reporting.Error.Canonicalize
+      Reporting.Error.Docs
+      Reporting.Error.Main
+      Reporting.Error.Pattern
+      Reporting.Error.Type
+      Reporting.Render.Code
+      Reporting.Render.Type
+      Reporting.Render.Type.Localizer
+      Reporting.Report
+      Reporting.Suggest
+      Reporting.Warning
+
+  build-depends:
+      ansi-terminal >=0.8 && <0.9
+    , ansi-wl-pprint >=0.6.8 && <0.7
+    , base >=4.8 && <5
+    , binary >=0.8 && <0.9
+    , bytestring >=0.9 && <0.11
+    , containers >=0.5.8.2 && <0.6
+    , directory >=1.2.3.0 && <2.0
+    , filepath >=1 && <2.0
+    , language-glsl >=0.0.2 && <0.3
+    , edit-distance >=0.2.2.1 && <0.3
+    , parsec
+    , scientific
+    , text >=1 && <2
+    , unordered-containers
+    , utf8-string
+    , vector
+
 executable elm-language-server-exe
   ghc-options:
       -O2 -Wall -Wno-name-shadowing
@@ -41,21 +120,7 @@ executable elm-language-server-exe
       Analyze.Data.ElmConfig
       Analyze.Data.Reference
       Analyze.Diagnostics
-      Analyze.Oracle
-      AST.Declaration
-      AST.Expression
-      AST.Helpers
-      AST.Json
-      AST.Module
-      AST.Pattern
-      AST.V0_16
-      AST.Variable
-      Cheapskate.Inlines
-      Cheapskate.Parse
-      Cheapskate.ParserCombinators
-      Cheapskate.Types
-      Cheapskate.Util
-      Elm.Utils
+      -- Analyze.Oracle
       LSP.Data.Capabilities
       LSP.Data.Diagnostic
       LSP.Data.DocumentFilter
@@ -81,29 +146,10 @@ executable elm-language-server-exe
       LSP.Update
       Misc
       Paths_elm_language_server
-      Parse.Binop
-      Parse.Common
-      Parse.Comments
-      Parse.Declaration
-      Parse.Expression
-      Parse.Helpers
-      Parse.IParser
-      Parse.Literal
-      Parse.Markdown
-      Parse.Module
-      Parse.Pattern
-      Parse.Parse
-      Parse.State
-      Parse.Type
-      Parse.Whitespace
-      Reporting.Annotation
-      Reporting.Error.Syntax
-      Reporting.Region
-      Reporting.Report
-      Reporting.Result
 
   build-depends:
       base >=4.8 && <5
+    , elm-language-server
     , aeson
     , aeson-utils
     , base >=4.8 && <5
@@ -112,9 +158,7 @@ executable elm-language-server-exe
     , directory >=1.2.3.0 && <2.0
     , filepath >=1 && <2.0
     , hashable
-    , indents >= 0.3.3 && < 0.4
     , json >= 0.9.1 && < 0.10
-    , mtl >= 2.2.1 && < 3
     , process
     , parsec >= 3.1.11 && < 4
     , Glob

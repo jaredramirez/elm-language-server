@@ -10,7 +10,6 @@ module LSP.Update
 
 import           Analyze.Data.Documentation  (Documentation, ModuleName)
 import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
-import           AST.Module                  (Module)
 import qualified Data.ByteString.Lazy        as BS
 import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HM
@@ -28,7 +27,7 @@ import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.URI                (URI)
-import           LSP.Model                   (Model)
+import           LSP.Model                   (Model, Module)
 import qualified LSP.Model                   as M
 import           Misc                        ((<|), (|>))
 import           Prelude                     hiding (init)

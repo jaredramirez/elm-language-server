@@ -3,6 +3,7 @@
 module LSP.Model
   ( Model(..)
   , Package(..)
+  , Module
   , elmConfigFileName
   , toCloneProjectRoot
   , switchProjectRootWithClonedProjectRoot
@@ -15,7 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
 import LSP.Data.URI (URI)
-import AST.Module (Module)
+import qualified AST.Source as Src
 import Misc ((|>))
 import Prelude hiding (init)
 
@@ -37,6 +38,10 @@ data Package = Package
   , _documentation :: HashMap ModuleName Documentation
   -- TODO: Add elm-format path
   } deriving (Show)
+
+
+type Module =
+  Src.Module [Src.Decl]
 
 
 elmConfigFileName :: Text
