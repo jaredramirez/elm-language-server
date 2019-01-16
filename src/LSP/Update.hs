@@ -8,13 +8,14 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import           Analyze.Data.Documentation  (Documentation, ModuleName)
-import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
+import           Analyze.Data.Documentation  (Documentation)
+import qualified AST.Module.Name             as ModuleName
 import qualified Data.ByteString.Lazy        as BS
-import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
+import           Data.Map                    (Map)
 import           Data.Text                   (Text)
+import           Elm.Project.Json            (Project)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
 import qualified LSP.Data.Error              as Error
@@ -47,22 +48,23 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text ElmVersion ElmConfig (HashMap ModuleName Documentation)
-  | UpdateElmConfig ElmConfig
+  = Initialize Text Text Text Text Project (Map ModuleName.Canonical Documentation)
   | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
   | SendDiagnostics URI [Diagnostic]
+  | UpdateElmProject Project
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
   | SendNotifError Error Text
   | InvalidElmVersion Text
   | NoOp
-  deriving (Show)
+
+
 
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable executableVersion config docs ->
+    Initialize id projectRoot clonedProjectRoot executable project docs ->
       ( model
           { M._initialized = True
           , M._package =
@@ -70,8 +72,7 @@ update msg model =
               M.Package projectRoot
                 clonedProjectRoot
                 executable
-                executableVersion
-                config
+                project
                 HM.empty
                 docs
           }
@@ -85,7 +86,7 @@ update msg model =
         , [ Registration.DidChangeWatchedFiles
               "watching"
               [ FileSystemWatcher.FileSystemWatcher
-                  (projectRoot <> "/" <> M.elmConfigFileName)
+                  (projectRoot <> "/" <> M.elmProjectFileName)
                   (Just FileChangeType.Changed)
               ]
           ]
@@ -94,17 +95,6 @@ update msg model =
           |> Message.NotificationMessage
           |> (Message.encode :: Message () -> BS.ByteString)
         ]
-      , ShouldNotTerminate
-      )
-
-    UpdateElmConfig elmConfig ->
-      ( model
-          { M._package =
-              model
-                |> M._package
-                |> fmap (\package -> package { M._elmConfig = elmConfig })
-          }
-      , None
       , ShouldNotTerminate
       )
 
@@ -143,6 +133,17 @@ update msg model =
       , (uri, diagnostics)
           |> encodeDiagnostics
           |> Send
+      , ShouldNotTerminate
+      )
+
+    UpdateElmProject elmProject ->
+      ( model
+          { M._package =
+              model
+                |> M._package
+                |> fmap (\package -> package { M._elmProject = elmProject })
+              }
+      , None
       , ShouldNotTerminate
       )
 
@@ -214,3 +215,34 @@ encodeDiagnostics tuple =
       |> NotifMethod.PublishDiagnostics
       |> Message.NotificationMessage
       |> encode
+
+
+instance Show Msg where
+  show msg =
+    case msg of
+      Initialize {} ->
+        "Initialize"
+
+      SetASTAndSendDiagnostics {} ->
+        "SetASTAndSendDiagnostics"
+
+      SendDiagnostics {} ->
+        "SendDiagnostics"
+
+      RequestShutDown ->
+        "RequestShutDown"
+
+      Exit ->
+        "Exit"
+
+      SendRequestError _ _ _ ->
+        "SendRequestError"
+
+      SendNotifError _ _ ->
+        "SendNotifError"
+
+      InvalidElmVersion _ ->
+        "InvalidElmVersion"
+
+      NoOp ->
+        "NoOp"

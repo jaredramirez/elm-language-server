@@ -7,13 +7,11 @@ module LSP.Misc
   , findElmExectuable
   , getFileParentDir
   , copyElmFileTree
-  , getElmVersion
+  , verifyElmVersion
   ) where
 
-import           Analyze.Data.ElmConfig   (ElmVersion)
-import qualified Analyze.Data.ElmConfig   as ElmConfig
-import           Control.Exception        (SomeException, catch, tryJust)
-import           Data.List                ((\\))
+import           Control.Exception        (SomeException, tryJust)
+import           Control.Monad.Trans      (liftIO)
 import qualified Data.List                as List
 import qualified Data.Maybe               as Maybe
 import qualified Data.HashMap.Strict      as HM
@@ -21,75 +19,72 @@ import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import qualified LSP.Log                  as Log
-import           Misc                     ((<|), (|>), mapLeft)
+import           Misc                     ((<|), (|>))
 import qualified System.Directory         as Dir
-import           System.FilePath          ((</>))
 import qualified System.FilePath          as FilePath
 import qualified System.FilePath.Glob     as Glob
+import           Task                     (Task)
+import qualified Task
 import           System.Exit              as SysE
 import           System.Process           as SysP
+
 
 ioToEither :: IO value -> IO (Either Text value)
 ioToEither io =
   tryJust exceptionToText io
 
 
--- ELM EXECTUABLE VERSION --
-getElmVersion :: Text -> IO (Either Text ElmVersion)
-getElmVersion elmExectuablePath =
-  fmap
-    (\(exitCode, stdOutString, stdErrString) ->
-      case exitCode of
-        SysE.ExitFailure _ ->
-          Left "Failed to get version"
-
-        SysE.ExitSuccess ->
-          case stdOutString of
-            "0.19.0\n" ->
-              Right ElmConfig.V0_19
-
-            _ ->
-              Right ElmConfig.InvalidVersion
-    )
-    (SysP.readProcessWithExitCode
-      (Text.unpack elmExectuablePath)
-      ["--version"]
-      ""
-    )
+exceptionToText :: SomeException -> Maybe Text
+exceptionToText ex = Just (Text.pack (show ex))
 
 
 -- ELM EXECTUABLE SEARCH --
-findElmExectuable :: Text -> IO (Either Text Text)
+findElmExectuable :: Text -> Task Text
 findElmExectuable projectRoot =
-  let normalised = projectRoot |> Text.unpack |> FilePath.normalise
-  in catch (findElmExectuableHelper normalised) handleExceptionEither
-
-
-findElmExectuableHelper :: FilePath -> IO (Either Text Text)
-findElmExectuableHelper !path =
-  let
-      localPath = path ++ "/node_modules/.bin/elm"
-  in
-  Log.logger path >>
-  Log.logger localPath >>
-  Dir.doesFileExist localPath >>= \doesExist ->
+  do
+    liftIO <| Log.logger projectRoot
+    let localPath = (Text.unpack projectRoot) ++ "/node_modules/.bin/elm"
+    liftIO <| Log.logger localPath
+    doesExist <- liftIO <| Dir.doesFileExist localPath
     if doesExist then
       localPath
         |> Text.pack
-        |> Right
         |> return
-
     else
-      fmap
-        (\maybeExectuable ->
-          maybeExectuable
-            |> fmap Text.pack
-            |> maybeToEither
+      do
+        maybeExectuable <- liftIO <| Dir.findExecutable "elm"
+        case maybeExectuable of
+          Nothing ->
+            Task.throw
               ("I couldn't find an elm executable!  I didn't see"
                 <> " it in \"node_modules/.bin/\" or your $PATH."
               )
-        )
-        (Dir.findExecutable "elm")
+
+          Just executable ->
+            return (Text.pack executable)
+
+
+-- VERIFY ELM VERSION
+verifyElmVersion :: Text -> Task ()
+verifyElmVersion elmExectuablePath =
+  do
+    (exitCode, stdOutString, _stdErrString) <-
+      liftIO <|
+        SysP.readProcessWithExitCode
+          (Text.unpack elmExectuablePath)
+          ["--version"]
+          ""
+    case exitCode of
+      SysE.ExitFailure _ ->
+        Task.throw "Failed to read elm version"
+
+      SysE.ExitSuccess ->
+        case stdOutString of
+          "0.19.0\n" ->
+            return ()
+
+          _ ->
+            Task.throw "Invalid elm version"
 
 
 -- COPY ELM FILE TREE
@@ -122,7 +117,13 @@ getElmFiles !source =
     |> fmap
         (\filePaths ->
           filePaths
-            |> List.filter (not . List.isInfixOf "elm-stuff")
+            |> List.filter
+                (\item ->
+                  -- TODO: do this in 1 pass with foldr
+                  -- Not sure if lazyness takes care of this
+                  not (List.isInfixOf "elm-stuff" item)
+                    && not (List.isInfixOf "test" item)
+                )
             |> List.map
                 (\path ->
                   path
@@ -155,7 +156,7 @@ copyElmFileTreeHelper !destination !source =
     getElmFiles source >>= \subItems ->
       subItems
         |> List.foldl
-            (\(dirs, paths) cur@(path, isDir) ->
+            (\(dirs, paths) cur@(_path, isDir) ->
               if isDir then
                 (cur : dirs, paths)
 
@@ -167,35 +168,10 @@ copyElmFileTreeHelper !destination !source =
         |> mapM_ (copyItem source destination)
 
 
-copyElmFileTree :: Text -> Text -> IO (Either Text ())
+copyElmFileTree :: FilePath -> FilePath -> Task ()
 copyElmFileTree destination source =
-  tryJust exceptionToText
+  Task.lift
     (copyElmFileTreeHelper
-      (destination |> Text.unpack |> FilePath.normalise)
-      (source |> Text.unpack |> FilePath.normalise)
+      (FilePath.normalise destination)
+      (FilePath.normalise source)
     )
-
-
-exceptionToText :: SomeException -> Maybe Text
-exceptionToText ex = Just (Text.pack (show ex))
-
-
--- SEARCH HELPERS
-maybeToEither :: e -> Maybe r -> Either e r
-maybeToEither error maybeResult =
-  case maybeResult of
-    Nothing ->
-      Left error
-
-    Just result ->
-      Right result
-
-
-handleExceptionEither :: SomeException -> IO (Either Text a)
-handleExceptionEither ex =
-  return (Left (Text.pack (show ex)))
-
-
-handleExceptionMaybe :: SomeException -> IO (Maybe a)
-handleExceptionMaybe ex =
-  return Nothing

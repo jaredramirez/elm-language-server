@@ -2,50 +2,48 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Analyze.Data.Documentation
-  ( ModuleName(..)
-  , Documentation(..)
+  ( Documentation(..)
   , Union(..)
   , UnionCase(..)
   , Alias(..)
   , Value(..)
   , Binop(..)
-  , readDocumentationFromDependencies
+  , readDocumentationFromProject
   ) where
 
 
-import Analyze.Data.ElmConfig (ExactVersion, DependencyName)
-import qualified Analyze.Data.ElmConfig as ElmConfig
-import Data.Aeson (FromJSON, FromJSONKey, (.:))
+import qualified AST.Module.Name as ModuleName
+import Control.Monad.Trans (liftIO)
+import Data.Aeson (FromJSON, (.:))
 import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.List as List
-import Data.Hashable as H
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
+import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Traversable as Traversable
+import Data.Semigroup ((<>))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Vector ((!?))
+import qualified Elm.Name as N
+import Elm.Package (Name, Version)
+import qualified Elm.Package as Package
+import qualified Elm.Project.Constraint as Con
+import Elm.Project.Json (Project)
+import qualified Elm.Project.Json as Project
+import Misc ((<|), (|>), andThen)
+import qualified Misc
 import Prelude hiding (Left, Right)
 import System.Directory as SysDir
-import Misc ((|>))
-import qualified Misc
+import Task (Task)
+import qualified Task
 
-
-newtype ModuleName =
-  ModuleName { _moduleNameText :: Text }
-  deriving (Show, Eq, Ord, H.Hashable, FromJSONKey)
-
-
-instance FromJSON ModuleName where
-  parseJSON =
-    A.withText "ModuleName" (\text -> return (ModuleName text))
 
 
 data Documentation
   = Documentation
-    { _name :: ModuleName
+    { _name :: Text
     , _comment :: Text
     , _unions :: [Union]
     , _aliases :: [Alias]
@@ -187,39 +185,105 @@ instance FromJSON Associativity where
         fail "invalid Associativity"
 
 
-readDocumentationFromDependencies ::
-  HashMap DependencyName ExactVersion
-  -> IO (Either Text (HashMap ModuleName Documentation))
-readDocumentationFromDependencies dependencies = do
-  homeDirectory <- SysDir.getHomeDirectory
-  listOfEithers <-
-    dependencies
-      |> HM.toList
-      |> List.map
-          (\((ElmConfig.DependencyName name), (ElmConfig.Exact version)) ->
-            (homeDirectory
-              ++ "/.elm/0.19.0/package/"
-              ++ Text.unpack name
-              ++ "/"
-              ++ Text.unpack version
-              ++ "/"
-              ++ "documentation.json"
-            )
-              |> BS.readFile
-              |> fmap
-                (A.eitherDecode'
-                  :: BS.ByteString -> Either String [Documentation]
+getLowestMatchingVersion :: FilePath -> Name -> Con.Constraint -> Task Version
+getLowestMatchingVersion packageDir name constraint =
+  do
+    let packageFilePath = Package.toFilePath name
+    let dir = packageDir ++ packageFilePath
+    contents <- liftIO <| SysDir.getDirectoryContents dir
+    let maybeVersion =
+          contents
+            |> List.foldr
+                (\versionString acc ->
+                  case acc of
+                    Nothing ->
+                      Package.versionFromText (Text.pack versionString)
+                        |> andThen
+                            (\version ->
+                              if Con.satisfies constraint version then
+                                Just version
+
+                              else
+                                Nothing
+                            )
+
+                    Just _ ->
+                      acc
                 )
+                Nothing
+    case maybeVersion of
+      Nothing ->
+        Task.throw ("No matching version for package " <> Text.pack (Package.toFilePath name))
+
+      Just version ->
+        return version
+
+
+readDocumentationFromProject :: Project -> Task (Map ModuleName.Canonical Documentation)
+readDocumentationFromProject project =
+  do
+    homeDirectory <- liftIO <| SysDir.getHomeDirectory
+    let packageDir = homeDirectory ++ "/.elm/0.19.0/package/"
+
+    -- Read package/versions from project
+    pkgVersionMap <-
+      case project of
+        Project.App (Project.AppInfo {Project._app_deps_direct = deps}) ->
+          return deps
+
+        Project.Pkg (Project.PkgInfo {Project._pkg_deps = deps}) ->
+          deps
+            |> Map.mapWithKey (getLowestMatchingVersion packageDir)
+            |> Traversable.sequence
+
+    -- Read the documentation file for each package/version
+    -- moduleEitherDocMap :: Map Name (Either String [Documentation])’
+    moduleEitherDocMap <-
+      pkgVersionMap
+        |> Map.mapWithKey
+            (\name version ->
+              (packageDir
+                ++ Package.toFilePath name
+                ++ "/"
+                ++ Package.versionToString version
+                ++ "/"
+                ++ "documentation.json"
+              )
+                |> BS.readFile
+                |> fmap
+                  (A.eitherDecode' :: BS.ByteString -> Either String [Documentation])
+            )
+        |> Traversable.sequence
+        |> liftIO
+
+    -- Sequence the results and transform the error type
+    -- moduleDocMap :: Either Text (Map Name Documentation)’
+    moduleDocMap <-
+      moduleEitherDocMap
+        |> Traversable.sequence
+        |> Misc.mapLeft Text.pack
+        |> Task.liftEither
+
+    -- Change from (Map PackageName [Documentation]) to (Map Module Documentation)
+    -- for easier lookups
+    moduleDocMap
+      |> Map.toList
+      |> List.foldr
+          (\(pkgName, documentations) acc ->
+            List.map
+              (\documentation ->
+                (ModuleName.Canonical
+                  pkgName
+                  (documentation
+                    |> _name
+                    |> N.fromText
+                  )
+                , documentation
+                )
+              )
+              documentations
+              ++ acc
           )
-      |> Traversable.sequence
-  listOfEithers
-    |> Traversable.sequence
-    |> Misc.mapLeft Text.pack
-    |> fmap
-      (\listOfDocumentations ->
-        listOfDocumentations
-          |> List.concat
-          |> fmap (\documentation -> (_name documentation, documentation))
-          |> HM.fromList
-      )
-    |> return
+          []
+      |> Map.fromList
+      |> return

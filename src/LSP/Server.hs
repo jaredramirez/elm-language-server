@@ -47,7 +47,6 @@ loop model =
                   U.SendMany byteStrings ->
                     sequence_ (List.map BS.putStr byteStrings)
           in
-          Log.logger ("Model: " ++ show nextModel) >>
           Log.logger ("Msg: " ++ show msg) >>
           Log.logger ("Response: " ++ show response) >>
           Log.logger ("Termination: " ++ show termination) >>

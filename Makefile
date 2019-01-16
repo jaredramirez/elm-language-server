@@ -1,4 +1,4 @@
-.PHONY: build run copy-exe install install-deps test test-install-deps clean
+.PHONY: build run copy-exe install install-deps test test-install-deps clean link
 
 build:
 	cabal build
@@ -22,3 +22,6 @@ test-install-deps:
 
 clean:
 	cabal clean
+
+link:
+	cabal sandbox add-source ./elm-compiler-library
