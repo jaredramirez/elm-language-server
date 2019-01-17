@@ -35,6 +35,7 @@ executable elm-language-server-exe
   other-extensions: TemplateHaskell
 
   other-modules:
+      Analyze.Canonical
       Analyze.Data.Documentation
       Analyze.Data.Reference
       Analyze.Diagnostics
