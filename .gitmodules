@@ -1,3 +1,0 @@
-[submodule "elm-compiler-library"]
-	path = elm-compiler-library
-	url = https://github.com/elm-tooling/elm-compiler-library.git
