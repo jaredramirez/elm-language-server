@@ -25,7 +25,7 @@ flag dev {
 
 executable elm-language-server-exe
   ghc-options:
-      -O2 -Wall -Wno-name-shadowing
+      -O2 -Wall -Werror -Wno-name-shadowing
 
   main-is: Main.hs
 
@@ -59,12 +59,14 @@ executable elm-language-server-exe
       LSP.Data.RequestMethod
       LSP.Data.TextDocumentIdentifier
       LSP.Data.URI
+      LSP.Log
       LSP.MessageHandler
       LSP.Misc LSP.Model
       LSP.Server
       LSP.Update
       Misc
       Paths_elm_language_server
+      Result
       Task
 
   build-depends:
