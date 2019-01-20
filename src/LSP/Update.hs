@@ -16,6 +16,7 @@ import           Data.Semigroup              ((<>))
 import           Data.Map                    (Map)
 import           Data.Text                   (Text)
 import           Elm.Project.Json            (Project)
+import           Elm.Project.Summary         (Summary)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
 import qualified LSP.Data.Error              as Error
@@ -48,10 +49,10 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text Project (Map ModuleName.Canonical Documentation)
+  = Initialize Text Text Text Text Project Summary (Map ModuleName.Canonical Documentation)
   | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
   | SendDiagnostics URI [Diagnostic]
-  | UpdateElmProject Project
+  | UpdateElmProjectAndSummary Project Summary
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
@@ -64,7 +65,7 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable project docs ->
+    Initialize id projectRoot clonedProjectRoot executable project summary docs ->
       ( model
           { M._initialized = True
           , M._package =
@@ -73,6 +74,7 @@ update msg model =
                 clonedProjectRoot
                 executable
                 project
+                summary
                 HM.empty
                 docs
           }
@@ -136,12 +138,18 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    UpdateElmProject elmProject ->
+    UpdateElmProjectAndSummary elmProject elmSummary ->
       ( model
           { M._package =
               model
                 |> M._package
-                |> fmap (\package -> package { M._elmProject = elmProject })
+                |> fmap
+                    (\package ->
+                      package
+                        { M._elmProject = elmProject
+                        , M._elmSummary = elmSummary
+                        }
+                    )
               }
       , None
       , ShouldNotTerminate

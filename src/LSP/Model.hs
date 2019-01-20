@@ -13,6 +13,7 @@ import Analyze.Data.Documentation (Documentation)
 import qualified AST.Module.Name as ModuleName
 import AST.Valid (Module)
 import Elm.Project.Json (Project)
+import Elm.Project.Summary (Summary)
 import Data.HashMap.Strict (HashMap)
 import Data.Map (Map)
 import Data.Text (Text)
@@ -35,6 +36,7 @@ data Package = Package
   , _clonedProjectRoot :: Text
   , _exectuable :: Text
   , _elmProject :: Project
+  , _elmSummary :: Summary
   , _ASTs :: HashMap URI Module
   , _documentation :: Map ModuleName.Canonical Documentation
   -- TODO: Add elm-format path

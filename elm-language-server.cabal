@@ -25,7 +25,7 @@ flag dev {
 
 executable elm-language-server-exe
   ghc-options:
-      -O2 -Wall -Werror -Wno-name-shadowing
+      -O2 -Wall -Wno-name-shadowing
 
   main-is: Main.hs
 

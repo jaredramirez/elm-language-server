@@ -7,7 +7,7 @@ module LSP.MessageHandler
 import qualified Analyze.Diagnostics         as Diagnostics
 import qualified Analyze.Data.Documentation  as Documentation
 -- import qualified Analyze.Oracle              as Oracle
-import AST.Valid                             (Module)
+import           AST.Valid                   (Module)
 import           Control.Monad.Trans         (liftIO)
 import           Elm.Project.Json            (Project)
 import qualified Elm.Project.Json            as Project
@@ -41,6 +41,7 @@ import           Misc                        ((<|), (|>))
 import qualified Misc
 import qualified Parse.Parse                 as Parse
 import qualified System.Directory            as Dir
+import qualified Stuff.Verify                as Verify
 import qualified Reporting.Result            as ElmResult
 import qualified Result
 import           Task                        (Task)
@@ -99,7 +100,8 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
           let clonedProjectRoot = projectRoot |> M.toCloneProjectRoot
           elmExectuable <- LSP.Misc.findElmExectuable projectRoot
           LSP.Misc.verifyElmVersion elmExectuable
-          elmProject <- readElmProject projectRoot clonedProjectRoot
+          elmProject <- readAndCloneElmProject projectRoot clonedProjectRoot
+          elmSummary <- Task.fromElmTask <| Verify.verify (Text.unpack projectRoot) elmProject
           cloneElmSrc elmProject clonedProjectRoot
           -- TODO: Maybe remove reading documentation? Canonizalization may remove
           -- the need
@@ -110,6 +112,7 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
               clonedProjectRoot
               elmExectuable
               elmProject
+              elmSummary
               documentationMap
             )
     in
@@ -195,17 +198,19 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
                   )
                   Nothing
                   params
-          elmProject <-
-            case (M._package model, relevantChange) of
-              (Just package, Just _) ->
-                readElmProject (M._projectRoot package) (M._clonedProjectRoot package)
+          case (M._package model, relevantChange) of
+            (Just package, Just _) ->
+              do
+                let projectRoot = package |> M._projectRoot
+                elmProject <- readAndCloneElmProject projectRoot (M._clonedProjectRoot package)
+                elmSummary <- Task.fromElmTask <| Verify.verify (projectRoot |> Text.unpack) elmProject
+                return (U.UpdateElmProjectAndSummary elmProject elmSummary)
 
-              (_, Nothing) ->
-                Task.throw "No relevant changes"
+            (_, Nothing) ->
+              Task.throw "No relevant changes"
 
-              (Nothing, _) ->
-                Task.throw "No existing elm data"
-          return (U.UpdateElmProject elmProject)
+            (Nothing, _) ->
+              Task.throw "No existing elm data"
   in
   Task.run (\errorMessage -> U.SendNotifError Error.InternalError errorMessage)
     task
@@ -309,9 +314,9 @@ createOrGetFileClone model fullFilePath =
               return clonedFilePath
 
 
--- This task parses elm.json and clones it to our source clone
-readElmProject :: Text -> Text -> Task Project
-readElmProject projectRoot clonedRoot =
+-- Parse elm.json and clone it to our source clone
+readAndCloneElmProject :: Text -> Text -> Task Project
+readAndCloneElmProject projectRoot clonedRoot =
   do  let projectPath = (projectRoot <> "/" <> M.elmProjectFileName)
       let projectPathString = Text.unpack projectPath
       let clonedRootString = Text.unpack clonedRoot
@@ -320,6 +325,7 @@ readElmProject projectRoot clonedRoot =
       liftIO <| Dir.createDirectoryIfMissing True clonedRootString
       liftIO <| Dir.copyFile projectPathString clonedProjectPathString
       return project
+
 
 
 -- Decode a module
