@@ -88,7 +88,7 @@ update msg model =
         , [ Registration.DidChangeWatchedFiles
               "watching"
               [ FileSystemWatcher.FileSystemWatcher
-                  (projectRoot <> "/" <> M.elmProjectFileName)
+                  (M.elmProjectPath projectRoot)
                   (Just FileChangeType.Changed)
               ]
           ]

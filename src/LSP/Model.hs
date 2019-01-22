@@ -4,8 +4,11 @@ module LSP.Model
   ( Model(..)
   , Package(..)
   , Module
-  , elmProjectFileName
-  , toCloneProjectRoot
+  , elmProject
+  , elmProjectPath
+  , elmStuff
+  , elmStuffPath
+  , cloneProject
   , switchProjectRootWithClonedProjectRoot
   ) where
 
@@ -21,6 +24,7 @@ import qualified Data.Text as Text
 import Data.Semigroup ((<>))
 import LSP.Data.URI (URI)
 import Misc ((|>))
+import System.FilePath ((</>))
 import Prelude hiding (init)
 
 
@@ -43,14 +47,27 @@ data Package = Package
   }
 
 
-elmProjectFileName :: Text
-elmProjectFileName =
-  "elm.json"
+elmProject :: String
+elmProject = "elm.json"
 
 
-toCloneProjectRoot :: Text -> Text
-toCloneProjectRoot root =
-  root <> "/elm-stuff/.lsp/clone"
+elmProjectPath :: Text -> Text
+elmProjectPath root =
+  Text.pack (Text.unpack root </> elmProject)
+
+
+elmStuff :: String
+elmStuff = "elm-stuff"
+
+
+elmStuffPath :: Text -> Text
+elmStuffPath root =
+  Text.pack (Text.unpack root </> elmStuff)
+
+
+cloneProject :: Text -> Text
+cloneProject root =
+  Text.pack (Text.unpack root </> elmStuff </>".lsp/clone")
 
 
 switchProjectRootWithClonedProjectRoot :: Model -> Text -> Maybe Text

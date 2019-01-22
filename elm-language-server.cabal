@@ -75,6 +75,7 @@ executable elm-language-server-exe
     , aeson
     , aeson-utils
     , base >=4.8 && <5
+    , binary >= 0.8 && < 0.9
     , bytestring >=0.9 && <0.11
     , containers >=0.5.8.2 && <0.6
     , directory >=1.2.3.0 && <2.0

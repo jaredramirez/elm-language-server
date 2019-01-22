@@ -19,9 +19,11 @@ import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import qualified LSP.Log                  as Log
+import qualified LSP.Model                as M
 import           Misc                     ((<|), (|>))
 import qualified System.Directory         as Dir
 import qualified System.FilePath          as FilePath
+import           System.FilePath          ((</>))
 import qualified System.FilePath.Glob     as Glob
 import           Task                     (Task)
 import qualified Task
@@ -42,9 +44,7 @@ exceptionToText ex = Just (Text.pack (show ex))
 findElmExectuable :: Text -> Task Text
 findElmExectuable projectRoot =
   do
-    liftIO <| Log.logger projectRoot
-    let localPath = (Text.unpack projectRoot) ++ "/node_modules/.bin/elm"
-    liftIO <| Log.logger localPath
+    let localPath = Text.unpack projectRoot ++ "/node_modules/.bin/elm"
     doesExist <- liftIO <| Dir.doesFileExist localPath
     if doesExist then
       localPath
@@ -110,44 +110,82 @@ extractDirectories paths =
     |> HM.toList
 
 
+getSubElmProjects :: FilePath -> IO [FilePath]
+getSubElmProjects source =
+  do
+    filePaths <- Glob.globDir1 (Glob.compile ("**/" ++ M.elmProject)) source
+    filePaths
+      |> List.map
+          (\path ->
+            -- We subtract the extra 1 to remove the trailing "/"
+            List.take
+              (List.length path - List.length M.elmProject - 1)
+              path
+          )
+      |> List.filter
+          (\path ->
+            path /= source && not (M.elmStuff `List.isInfixOf` path)
+          )
+      |> return
+
+
+isPrefixOfAny :: [FilePath] -> FilePath -> Bool
+isPrefixOfAny listOfDirs filePath =
+  List.foldr
+    (\dir hasAlreadyFoundMatch ->
+      if hasAlreadyFoundMatch then
+        True
+
+      else
+        List.isPrefixOf dir filePath
+    )
+    False
+    listOfDirs
+
+
 getElmFiles :: FilePath -> IO [(FilePath, Bool)]
 getElmFiles !source =
-  source
-    |> Glob.globDir1 (Glob.compile "**/*.elm")
-    |> fmap
-        (\filePaths ->
-          filePaths
-            |> List.filter
-                (\item ->
-                  -- TODO: do this in 1 pass with foldr
-                  -- Not sure if lazyness takes care of this
-                  not (List.isInfixOf "elm-stuff" item)
-                    && not (List.isInfixOf "test" item)
-                )
-            |> List.map
-                (\path ->
-                  path
-                    |> List.stripPrefix source
-                    |> Maybe.fromMaybe path
-                )
-        )
-    |> fmap extractDirectories
+  do
+    filePaths <- Glob.globDir1 (Glob.compile "**/*.elm") source
+    subElmProjectPaths <- getSubElmProjects source
+    filePaths
+      |> List.filter
+          (\item ->
+            not (List.isInfixOf M.elmStuff item)
+              && not (item |> isPrefixOfAny subElmProjectPaths)
+          )
+      |> List.map
+          (\path ->
+            path
+              |> List.stripPrefix source
+              |> fmap (List.drop 1)
+              |> Maybe.fromMaybe path
+          )
+      |> extractDirectories
+      |> return
 
 
 copyItem :: FilePath -> FilePath -> (FilePath, Bool) -> IO ()
 copyItem !baseSourcePath !baseTargetPath (relativePath, isDir) =
     let
         sourcePath =
-          baseSourcePath ++ relativePath
+          baseSourcePath </> relativePath
 
         targetPath =
-          baseTargetPath ++ relativePath
+          baseTargetPath </> relativePath
     in
-    if isDir then
-      Dir.createDirectoryIfMissing True targetPath
+    do
+      Log.logger baseSourcePath
+      Log.logger baseTargetPath
+      Log.logger relativePath
+      Log.logger sourcePath
+      Log.logger targetPath
+      Log.logger ""
+      if isDir then
+        Dir.createDirectoryIfMissing True targetPath
 
-    else
-      Dir.copyFile sourcePath targetPath
+      else
+        Dir.copyFile sourcePath targetPath
 
 
 copyElmFileTreeHelper :: FilePath -> FilePath -> IO ()

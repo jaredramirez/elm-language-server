@@ -9,9 +9,12 @@ import qualified Analyze.Data.Documentation  as Documentation
 -- import qualified Analyze.Oracle              as Oracle
 import           AST.Valid                   (Module)
 import           Control.Monad.Trans         (liftIO)
+import qualified Elm.Compiler.Module         as Module
+import           Elm.Package                 as Package
 import           Elm.Project.Json            (Project)
 import qualified Elm.Project.Json            as Project
 import qualified LSP.Data.Error              as Error
+import qualified Data.Binary                 as Binary
 import qualified Data.List                   as List
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
@@ -32,6 +35,7 @@ import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Data.URI                as URI
 import           LSP.Data.Diagnostic         (Diagnostic)
+import qualified LSP.Log                     as Log
 import qualified LSP.Misc
 import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
@@ -41,6 +45,9 @@ import           Misc                        ((<|), (|>))
 import qualified Misc
 import qualified Parse.Parse                 as Parse
 import qualified System.Directory            as Dir
+import           System.FilePath             ((</>))
+import qualified System.FilePath             as FilePath
+import qualified System.FilePath.Glob        as Glob
 import qualified Stuff.Verify                as Verify
 import qualified Reporting.Result            as ElmResult
 import qualified Result
@@ -97,7 +104,7 @@ requestInitializeHandler id (RequestMethod.InitializeParams uri) =
       task =
         do
           let (URI.URI projectRoot) = uri
-          let clonedProjectRoot = projectRoot |> M.toCloneProjectRoot
+          let clonedProjectRoot = M.cloneProject projectRoot
           elmExectuable <- LSP.Misc.findElmExectuable projectRoot
           LSP.Misc.verifyElmVersion elmExectuable
           elmProject <- readAndCloneElmProject projectRoot clonedProjectRoot
@@ -186,7 +193,7 @@ didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams para
                         (URI.URI filePath) =
                           uri
                     in
-                    if Text.isSuffixOf M.elmProjectFileName filePath then
+                    if Text.isSuffixOf "elm.json" filePath then
                       case changeType of
                         FileChangeType.Changed ->
                           Just cur
@@ -248,24 +255,27 @@ hover id model (RequestMethod.TextDocumentHoverParams (uri, position)) =
 -- as-you-type diagnostics to the user
 cloneElmSrc :: Project -> Text -> Task ()
 cloneElmSrc project clonedProjectRoot =
-  do
-    let sourceDirectories =
-          case project of
-            Project.App (Project.AppInfo {Project._app_source_dirs = dirs}) ->
-              dirs
+  let
+      sourceDirectories =
+        case project of
+          Project.App (Project.AppInfo {Project._app_source_dirs = dirs}) ->
+            dirs
 
-            Project.Pkg (Project.PkgInfo {}) ->
-              ["."]
-    let clonedProjectRootString =
-          Text.unpack clonedProjectRoot ++ "/"
-    sourceDirectories
-      |> List.map
-          (\path ->
-            LSP.Misc.copyElmFileTree
-              (clonedProjectRootString ++ path)
-              path
-          )
-      |> sequence_
+          Project.Pkg (Project.PkgInfo {}) ->
+            ["."]
+
+      clonedProjectRootString =
+        Text.unpack clonedProjectRoot
+  in
+  sourceDirectories
+    |> List.map
+        (\path ->
+          do
+            baseTargetPath <- liftIO <| Dir.makeAbsolute (clonedProjectRootString </> path)
+            baseSourcePath <- liftIO <| Dir.makeAbsolute path
+            LSP.Misc.copyElmFileTree baseTargetPath baseSourcePath
+        )
+    |> sequence_
 
 
 -- This task runs the elm compiler with the flag `--report=json` on
@@ -317,15 +327,14 @@ createOrGetFileClone model fullFilePath =
 -- Parse elm.json and clone it to our source clone
 readAndCloneElmProject :: Text -> Text -> Task Project
 readAndCloneElmProject projectRoot clonedRoot =
-  do  let projectPath = (projectRoot <> "/" <> M.elmProjectFileName)
+  do  let projectPath = M.elmProjectPath projectRoot
       let projectPathString = Text.unpack projectPath
       let clonedRootString = Text.unpack clonedRoot
-      let clonedProjectPathString = clonedRootString ++ Text.unpack ("/" <> M.elmProjectFileName)
+      let clonedProjectPathString = Text.unpack (M.elmProjectPath clonedRoot)
       project <- Task.fromElmTask (Project.read projectPathString)
       liftIO <| Dir.createDirectoryIfMissing True clonedRootString
       liftIO <| Dir.copyFile projectPathString clonedProjectPathString
       return project
-
 
 
 -- Decode a module
@@ -351,3 +360,32 @@ decodeModule model document =
             |> Misc.andThen ElmResult.ok
             |> Result.fromElmResult
         )
+
+
+-- Read in all *.elmi files as interfaces
+readInterfaces :: FilePath -> Task ()
+readInterfaces projectRoot =
+  do
+    return ()
+
+
+readInterface :: Package.Name -> FilePath -> Task (Module.Canonical, Module.Interface)
+readInterface pkgName filePath =
+  do
+    let maybeRawModuleName =
+          filePath
+            |> FilePath.takeBaseName
+            |> Text.pack
+            |> Module.fromHyphenPath
+    doesExist <-liftIO (Dir.doesFileExist filePath)
+    case (doesExist, maybeRawModuleName) of
+      (True, Just rawModuleName) ->
+        do
+          decoded <- liftIO (Binary.decodeFile filePath)
+          return (Module.Canonical pkgName rawModuleName, decoded)
+
+      (False, _)->
+        Task.throw ("File \"" <> Text.pack filePath <> "\" was not found")
+
+      (_, Nothing)->
+        Task.throw ("File \"" <> Text.pack filePath <> "\" didn't have a valid name")
