@@ -13,31 +13,33 @@ import           LSP.Model                   (Model)
 import qualified LSP.Update                  as U
 import qualified LSP.MessageHandler          as MessageHandler
 import qualified System.IO                   as IO
+import qualified Task
 import qualified Analyze.Canonical
 
 run :: IO Int
 run =
-  IO.hSetBuffering IO.stdin IO.NoBuffering >>
-  IO.hSetEncoding IO.stdin IO.utf8 >>
-  IO.hSetBuffering IO.stdout IO.NoBuffering >>
-  IO.hSetEncoding IO.stdout IO.utf8 >>
-  catch (loop U.init) handleException
+  do
+    IO.hSetBuffering IO.stdin IO.NoBuffering
+    IO.hSetEncoding IO.stdin IO.utf8
+    IO.hSetBuffering IO.stdout IO.NoBuffering
+    IO.hSetEncoding IO.stdout IO.utf8
+    catch (loop U.init) handleException
 
 loop :: Model -> IO Int
 loop model =
-  Message.decode IO.stdin >>= \decoded ->
+  do
+    decoded <- Message.decode IO.stdin
     case decoded of
       Left _ ->
         loop model
 
       Right message ->
-        Log.logger ("Message: " ++ show message) >>
-        MessageHandler.handler model message >>= \msg ->
-          let
-              (nextModel, response, termination) =
-                U.update msg model
-
-              responseIO =
+        do
+          Log.logger ("Message: " ++ show message)
+          let task = MessageHandler.handler model message
+          msg <- Task.run task
+          let (nextModel, response, termination) = U.update msg model
+          let responseIO =
                 case response of
                   U.None ->
                     return ()
@@ -47,17 +49,16 @@ loop model =
 
                   U.SendMany byteStrings ->
                     sequence_ (List.map BS.putStr byteStrings)
-          in
-          Log.logger ("Msg: " ++ show msg) >>
-          Log.logger ("Response: " ++ show response) >>
-          Log.logger ("Termination: " ++ show termination) >>
-          Log.logger ("" :: String) >>
-            case termination of
-              U.ShouldTerminate ->
-                return 1
+          Log.logger ("Msg: " ++ show msg)
+          Log.logger ("Response: " ++ show response)
+          Log.logger ("Termination: " ++ show termination)
+          Log.logger ("" :: String)
+          case termination of
+            U.ShouldTerminate ->
+              return 1
 
-              U.ShouldNotTerminate ->
-                responseIO >> loop nextModel
+            U.ShouldNotTerminate ->
+              responseIO >> loop nextModel
 
 handleException :: SomeException -> IO Int
 handleException ex =

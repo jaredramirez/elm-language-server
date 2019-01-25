@@ -5,22 +5,35 @@
 module LSP.Misc
   ( ioToEither
   , findElmExectuable
-  , getFileParentDir
   , copyElmFileTree
   , verifyElmVersion
+  , readInterfaces
+  , getForeignImportDict
+  , getLocalImportDict
+  , combineImportDicts
   ) where
 
+import qualified AST.Source               as Src
+import qualified AST.Valid                as AST
 import           Control.Exception        (SomeException, tryJust)
 import           Control.Monad.Trans      (liftIO)
+import qualified Elm.Compiler.Module      as Module
+import           Elm.Project.Json         (Project)
+import qualified Elm.Project.Json         as Project
+import           Elm.Package              as Package
+import           Elm.Project.Json         as Project
+import qualified Data.Binary              as Binary
 import qualified Data.List                as List
 import qualified Data.Maybe               as Maybe
 import qualified Data.HashMap.Strict      as HM
+import qualified Data.Map                 as Map
 import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import qualified LSP.Log                  as Log
 import qualified LSP.Model                as M
 import           Misc                     ((<|), (|>))
+import qualified Reporting.Annotation     as A
 import qualified System.Directory         as Dir
 import qualified System.FilePath          as FilePath
 import           System.FilePath          ((</>))
@@ -88,11 +101,6 @@ verifyElmVersion elmExectuablePath =
 
 
 -- COPY ELM FILE TREE
-getFileParentDir :: FilePath -> FilePath
-getFileParentDir path =
-  List.dropWhileEnd (\c -> c /= '/') path
-
-
 extractDirectories :: [FilePath] -> [(FilePath, Bool)]
 extractDirectories paths =
   paths
@@ -100,7 +108,7 @@ extractDirectories paths =
         (\acc curPath ->
           let
               parentDir =
-                getFileParentDir curPath
+                FilePath.takeDirectory curPath
           in
           acc
             |> HM.insert parentDir True
@@ -174,18 +182,11 @@ copyItem !baseSourcePath !baseTargetPath (relativePath, isDir) =
         targetPath =
           baseTargetPath </> relativePath
     in
-    do
-      Log.logger baseSourcePath
-      Log.logger baseTargetPath
-      Log.logger relativePath
-      Log.logger sourcePath
-      Log.logger targetPath
-      Log.logger ""
-      if isDir then
-        Dir.createDirectoryIfMissing True targetPath
+    if isDir then
+      Dir.createDirectoryIfMissing True targetPath
 
-      else
-        Dir.copyFile sourcePath targetPath
+    else
+      Dir.copyFile sourcePath targetPath
 
 
 copyElmFileTreeHelper :: FilePath -> FilePath -> IO ()
@@ -213,3 +214,82 @@ copyElmFileTree destination source =
       (FilePath.normalise destination)
       (FilePath.normalise source)
     )
+
+
+-- Read in *.elmi files as interfaces
+readInterfaces :: Project -> Text -> Task Module.Interfaces
+readInterfaces project projectRoot =
+  let
+      projectName =
+        project
+          |> Project.getName
+
+      interfacesPath =
+        projectRoot
+          |> M.elmInterfacesPath
+          |> Text.unpack
+  in
+  do
+    filePaths <- liftIO <| Glob.globDir1 (Glob.compile "**/*.elmi") interfacesPath
+    tuples <- mapM (readInterface projectName) filePaths
+    tuples
+      |> Map.fromList
+      |> return
+
+
+readInterface :: Package.Name -> FilePath -> Task (Module.Canonical, Module.Interface)
+readInterface pkgName filePath =
+  let
+      maybeRawModuleName =
+        filePath
+          |> FilePath.takeBaseName
+          |> Text.pack
+          |> Module.fromHyphenPath
+  in
+  do
+    doesExist <-liftIO (Dir.doesFileExist filePath)
+    case (doesExist, maybeRawModuleName) of
+      (True, Just rawModuleName) ->
+        do
+          decoded <- liftIO (Binary.decodeFile filePath)
+          return (Module.Canonical pkgName rawModuleName, decoded)
+
+      (False, _)->
+        Task.throw ("File \"" <> Text.pack filePath <> "\" was not found")
+
+      (_, Nothing)->
+        Task.throw ("File \"" <> Text.pack filePath <> "\" didn't have a valid name")
+
+
+-- Get imports for a module
+getForeignImportDict :: Module.Interfaces -> M.ImportDict
+getForeignImportDict foreignInterfaces =
+  foreignInterfaces
+    |> Map.toList
+    |> List.map (\(canonical@(Module.Canonical _ name), _) -> (name, canonical))
+    |> Map.fromList
+
+
+getLocalImportDict :: Project -> AST.Module -> M.ImportDict
+getLocalImportDict project localModule =
+  let
+      pkgName = Project.getName project
+  in
+  localModule
+    |> AST._imports
+    |> List.map
+        (\(Src.Import (A.At _ importName) _ _) ->
+          (importName, Module.Canonical pkgName importName)
+        )
+    |> Map.fromList
+
+
+-- Note that `combineImportDicts` is left-biased, so any foreign modules imported
+-- and created in `localImports` will be overridden by their actual canonical info
+-- from `foreignImports`
+combineImportDicts :: M.ImportDict -> M.ImportDict -> M.ImportDict
+combineImportDicts foreignImports localImports =
+  Map.union foreignImports localImports
+
+
+-- todo: update interface

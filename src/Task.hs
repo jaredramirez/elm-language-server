@@ -2,6 +2,7 @@
 
 module Task
   ( Task
+  , SimpleTask
   , try
   , run
   , throw
@@ -31,6 +32,10 @@ type Task value =
   Task_ Text value
 
 
+type SimpleTask value =
+  Task_ value value
+
+
 type Task_ error value =
   E.ExceptT error IO value
 
@@ -40,14 +45,14 @@ try task =
   E.runExceptT task
 
 
-run :: (Text -> value) -> Task value -> IO value
-run toValue task =
+run :: SimpleTask msg -> IO msg
+run task =
   do
     either <- E.runExceptT task
     let result =
           case either of
-            Left text ->
-              toValue text
+            Left value ->
+             value
 
             Right value ->
               value

@@ -9,12 +9,12 @@ module LSP.Update
   ) where
 
 import           Analyze.Data.Documentation  (Documentation)
-import qualified AST.Module.Name             as ModuleName
 import qualified Data.ByteString.Lazy        as BS
 import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Map                    (Map)
 import           Data.Text                   (Text)
+import qualified Elm.Compiler.Module         as Module
 import           Elm.Project.Json            (Project)
 import           Elm.Project.Summary         (Summary)
 import qualified LSP.Data.Capabilities       as Capabilities
@@ -29,7 +29,7 @@ import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.URI                (URI)
-import           LSP.Model                   (Model, Module)
+import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           Misc                        ((<|), (|>))
 import           Prelude                     hiding (init)
@@ -49,8 +49,16 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text Project Summary (Map ModuleName.Canonical Documentation)
-  | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
+  = Initialize
+      Text
+      Text
+      Text
+      Text
+      Project
+      Summary
+      Module.Interfaces
+      M.ImportDict
+      Module.Interfaces
   | SendDiagnostics URI [Diagnostic]
   | UpdateElmProjectAndSummary Project Summary
   | RequestShutDown
@@ -65,7 +73,7 @@ data Msg
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable project summary docs ->
+    Initialize id projectRoot clonedProjectRoot executable project summary foreignInterfaces foreignImportDict localInterfaces ->
       ( model
           { M._initialized = True
           , M._package =
@@ -75,8 +83,9 @@ update msg model =
                 executable
                 project
                 summary
-                HM.empty
-                docs
+                foreignInterfaces
+                foreignImportDict
+                localInterfaces
           }
       , SendMany
         [ Message.encode
@@ -97,36 +106,6 @@ update msg model =
           |> Message.NotificationMessage
           |> (Message.encode :: Message () -> BS.ByteString)
         ]
-      , ShouldNotTerminate
-      )
-
-    SetASTAndSendDiagnostics uri maybeAST diagnostics ->
-      ( model
-        { M._package =
-            model
-              |> M._package
-              |> fmap
-                (\package ->
-                  package
-                    { M._ASTs =
-                      package
-                        |> M._ASTs
-                        |> HM.alter
-                          (\maybeExisting ->
-                            case maybeAST of
-                              Nothing ->
-                                maybeExisting
-
-                              Just ast ->
-                                Just ast
-                          )
-                          uri
-                    }
-                )
-        }
-      , (uri, diagnostics)
-          |> encodeDiagnostics
-          |> Send
       , ShouldNotTerminate
       )
 
@@ -231,11 +210,11 @@ instance Show Msg where
       Initialize {} ->
         "Initialize"
 
-      SetASTAndSendDiagnostics {} ->
-        "SetASTAndSendDiagnostics"
-
       SendDiagnostics {} ->
         "SendDiagnostics"
+
+      UpdateElmProjectAndSummary {} ->
+        "UpdateElmProjectAndSummary"
 
       RequestShutDown ->
         "RequestShutDown"

@@ -3,26 +3,23 @@
 module LSP.Model
   ( Model(..)
   , Package(..)
-  , Module
+  , ImportDict
   , elmProject
   , elmProjectPath
   , elmStuff
   , elmStuffPath
+  , elmInterfacesPath
   , cloneProject
   , switchProjectRootWithClonedProjectRoot
   ) where
 
-import Analyze.Data.Documentation (Documentation)
-import qualified AST.Module.Name as ModuleName
-import AST.Valid (Module)
+import qualified Elm.Compiler.Module as Module
 import Elm.Project.Json (Project)
 import Elm.Project.Summary (Summary)
-import Data.HashMap.Strict (HashMap)
 import Data.Map (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Semigroup ((<>))
-import LSP.Data.URI (URI)
 import Misc ((|>))
 import System.FilePath ((</>))
 import Prelude hiding (init)
@@ -41,10 +38,15 @@ data Package = Package
   , _exectuable :: Text
   , _elmProject :: Project
   , _elmSummary :: Summary
-  , _ASTs :: HashMap URI Module
-  , _documentation :: Map ModuleName.Canonical Documentation
-  -- TODO: Add elm-format path
+  , _foreignInterfaces :: Module.Interfaces
+  , _foreignImportDict :: ImportDict
+  , _localInterfaces :: Module.Interfaces
+  -- TODO: Add elm-format path?
   }
+
+
+type ImportDict =
+  Map Module.Raw Module.Canonical
 
 
 elmProject :: String
@@ -63,6 +65,11 @@ elmStuff = "elm-stuff"
 elmStuffPath :: Text -> Text
 elmStuffPath root =
   Text.pack (Text.unpack root </> elmStuff)
+
+
+elmInterfacesPath :: Text -> Text
+elmInterfacesPath root =
+  Text.pack (Text.unpack root </> elmStuff </> "0.19.0")
 
 
 cloneProject :: Text -> Text
