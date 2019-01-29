@@ -8,6 +8,7 @@ import qualified Analyze.Diagnostics         as Diagnostics
 -- import qualified Analyze.Oracle              as Oracle
 import qualified AST.Canonical               as Can
 import           Control.Monad.Trans         (liftIO)
+import qualified Elm.Compiler.Module         as Module
 import           Elm.Project.Json            (Project)
 import qualified Elm.Project.Json            as Project
 import qualified Elm.Project.Summary         as Summary
@@ -122,29 +123,11 @@ requestInitializeTask id (RequestMethod.InitializeParams uri) =
 
 textDocumentDidOpenTask:: Model -> TextDocumentDidOpenParams -> Task Msg
 textDocumentDidOpenTask model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, source)) =
-  let
-      (URI.URI filePath) =
-        uri
-
-      -- This is werid, but make a task always succeds
-      -- with it's success value an Either. We do this
-      -- because we don't want the failure to decode or
-      -- to getting an interface to fail this entire
-      -- message handler
-      successfulTaskCanonicalAndInterface =
-        decodeModule model source
-          |> andThen
-              (\canonical ->
-                LSP.Misc.getInterface canonical
-                  |> fmap (\interface -> (canonical, interface))
-              )
-          |> Task.try
-          |> liftIO
-  in
   do
+    let (URI.URI filePath) = uri
     createFilePath <- createOrGetFileClone model filePath
     diagnostics <- getDiagnostics model createFilePath
-    eitherCanonicalAndInterface <- successfulTaskCanonicalAndInterface
+    eitherCanonicalAndInterface <- getCanonicalAndInterface model source
     case eitherCanonicalAndInterface of
       Right (canonical, interface) ->
         return
@@ -156,7 +139,7 @@ textDocumentDidOpenTask model (NotificationMethod.TextDocumentDidOpenParams (uri
             diagnostics
           )
 
-      Left error ->
+      Left _ ->
         return (U.SendDiagnostics uri diagnostics)
 
 
@@ -173,27 +156,11 @@ textDocumentDidChangeTask model (NotificationMethod.TextDocumentDidChangeParams 
         Task.throw "No document changes received"
 
       Just (NotificationMethod.ContentChange source) ->
-        let
-            -- This is werid, but makse a task always succeds
-            -- with it's success value an Either. We do this
-            -- because we don't want the failure to decode or
-            -- to getting an interface to fail this entire
-            -- message handler
-            successfulTaskCanonicalAndInterface =
-              decodeModule model source
-                |> andThen
-                    (\canonical ->
-                      LSP.Misc.getInterface canonical
-                        |> fmap (\interface -> (canonical, interface))
-                    )
-                |> Task.try
-                |> liftIO
-        in
         do
           clonedFilePath <- createOrGetFileClone model filePath
           updateFileContents clonedFilePath source
           diagnostics <- getDiagnostics model clonedFilePath
-          eitherCanonicalAndInterface <- successfulTaskCanonicalAndInterface
+          eitherCanonicalAndInterface <- getCanonicalAndInterface model source
           case eitherCanonicalAndInterface of
             Right (canonical, interface) ->
               return
@@ -205,7 +172,7 @@ textDocumentDidChangeTask model (NotificationMethod.TextDocumentDidChangeParams 
                   diagnostics
                 )
 
-            _ ->
+            Left _ ->
               return (U.SendDiagnostics uri diagnostics)
 
 
@@ -366,6 +333,24 @@ readAndCloneElmProject projectRoot clonedRoot =
       liftIO <| Dir.createDirectoryIfMissing True clonedRootString
       liftIO <| Dir.copyFile projectPathString clonedProjectPathString
       return project
+
+
+
+-- This is werid, but make a task always succeds
+-- with it's success value an Either. We do this
+-- because we don't want the failure to decode or
+-- to getting an interface to fail this entire
+-- message handler
+getCanonicalAndInterface :: Model -> Text -> Task (Either Text (Can.Module, Module.Interface))
+getCanonicalAndInterface model source =
+  decodeModule model source
+    |> andThen
+        (\canonical ->
+          LSP.Misc.getInterface canonical
+            |> fmap (\interface -> (canonical, interface))
+        )
+    |> Task.try
+    |> liftIO
 
 
 -- Decode a module

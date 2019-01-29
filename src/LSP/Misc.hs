@@ -315,7 +315,6 @@ canonicalize pkgName localModule foreignImportDict localInterfaces foreignInterf
 
   in
   do
-    liftIO <| Log.logger (Map.toList importDict )
     Canonicalize.canonicalize pkgName importDict interfaces localModule
       |> Task.fromElmResult (\_ -> "Failed to canonicalized")
 
