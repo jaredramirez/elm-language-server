@@ -35,7 +35,7 @@ loop model =
 
       Right message ->
         do
-          Log.logger ("Message: " ++ show message)
+          -- Log.logger ("Message: " ++ show message)
           let task = MessageHandler.handler model message
           msg <- Task.run task
           let (nextModel, response, termination) = U.update msg model
@@ -51,8 +51,7 @@ loop model =
                     sequence_ (List.map BS.putStr byteStrings)
           Log.logger ("Msg: " ++ show msg)
           Log.logger ("Response: " ++ show response)
-          Log.logger ("Termination: " ++ show termination)
-          Log.logger ("" :: String)
+          Log.logger ("Model: " ++ show model ++ "\n")
           case termination of
             U.ShouldTerminate ->
               return 1

@@ -6,19 +6,15 @@ module LSP.MessageHandler
 
 import qualified Analyze.Diagnostics         as Diagnostics
 -- import qualified Analyze.Oracle              as Oracle
-import           AST.Valid                   (Module)
+import qualified AST.Canonical               as Can
 import           Control.Monad.Trans         (liftIO)
 import           Elm.Project.Json            (Project)
 import qualified Elm.Project.Json            as Project
 import qualified Elm.Project.Summary         as Summary
 import qualified LSP.Data.Error              as Error
-import qualified Data.Binary                 as Binary
 import qualified Data.List                   as List
-import qualified Data.Map                    as Map
-import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
-import qualified Data.Text.Encoding          as TextEncode
 import qualified LSP.Data.FileEvent          as FileEvent
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.Message            (Message)
@@ -40,16 +36,12 @@ import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           LSP.Update                  (Msg)
 import qualified LSP.Update                  as U
-import           Misc                        ((<|), (|>))
+import           Misc                        ((<|), (|>), andThen)
 import qualified Misc
-import qualified Parse.Parse                 as Parse
 import qualified System.Directory            as Dir
 import           System.FilePath             ((</>))
 import qualified System.FilePath             as FilePath
-import qualified System.FilePath.Glob        as Glob
 import qualified Stuff.Verify                as Verify
-import qualified Reporting.Result            as ElmResult
-import qualified Result
 import           Task                        (Task, SimpleTask)
 import qualified Task
 
@@ -85,7 +77,7 @@ handler model incomingMessage =
       didChangeWatchedFilesTask model params
         |> Task.mapError (\errorMessage -> U.SendNotifError Error.InternalError errorMessage)
 
-    (True, Message.RequestMessage id (RequestMethod.TextDocumentHover params)) ->
+    (True, Message.RequestMessage _id (RequestMethod.TextDocumentHover _params)) ->
       U.RequestShutDown
         |> return
 
@@ -129,14 +121,43 @@ requestInitializeTask id (RequestMethod.InitializeParams uri) =
 
 
 textDocumentDidOpenTask:: Model -> TextDocumentDidOpenParams -> Task Msg
-textDocumentDidOpenTask model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, document)) =
+textDocumentDidOpenTask model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, source)) =
+  let
+      (URI.URI filePath) =
+        uri
+
+      -- This is werid, but make a task always succeds
+      -- with it's success value an Either. We do this
+      -- because we don't want the failure to decode or
+      -- to getting an interface to fail this entire
+      -- message handler
+      successfulTaskCanonicalAndInterface =
+        decodeModule model source
+          |> andThen
+              (\canonical ->
+                LSP.Misc.getInterface canonical
+                  |> fmap (\interface -> (canonical, interface))
+              )
+          |> Task.try
+          |> liftIO
+  in
   do
-    let (URI.URI filePath) = uri
-    let _maybeModule = decodeModule model document
-    -- todo: update interface
     createFilePath <- createOrGetFileClone model filePath
     diagnostics <- getDiagnostics model createFilePath
-    return (U.SendDiagnostics uri diagnostics)
+    eitherCanonicalAndInterface <- successfulTaskCanonicalAndInterface
+    case eitherCanonicalAndInterface of
+      Right (canonical, interface) ->
+        return
+          (U.UpdateModuleAndSendDiagnostics
+            uri
+            canonical
+            (Can._name canonical)
+            interface
+            diagnostics
+          )
+
+      Left error ->
+        return (U.SendDiagnostics uri diagnostics)
 
 
 textDocumentDidChangeTask:: Model -> TextDocumentDidChangeParams -> Task Msg
@@ -151,14 +172,41 @@ textDocumentDidChangeTask model (NotificationMethod.TextDocumentDidChangeParams 
       Nothing ->
         Task.throw "No document changes received"
 
-      Just (NotificationMethod.ContentChange actualContentChanges) ->
+      Just (NotificationMethod.ContentChange source) ->
+        let
+            -- This is werid, but makse a task always succeds
+            -- with it's success value an Either. We do this
+            -- because we don't want the failure to decode or
+            -- to getting an interface to fail this entire
+            -- message handler
+            successfulTaskCanonicalAndInterface =
+              decodeModule model source
+                |> andThen
+                    (\canonical ->
+                      LSP.Misc.getInterface canonical
+                        |> fmap (\interface -> (canonical, interface))
+                    )
+                |> Task.try
+                |> liftIO
+        in
         do
-          let _maybeModule = decodeModule model actualContentChanges
-          -- todo: update interface
           clonedFilePath <- createOrGetFileClone model filePath
-          updateFileContents clonedFilePath actualContentChanges
+          updateFileContents clonedFilePath source
           diagnostics <- getDiagnostics model clonedFilePath
-          return (U.SendDiagnostics uri diagnostics)
+          eitherCanonicalAndInterface <- successfulTaskCanonicalAndInterface
+          case eitherCanonicalAndInterface of
+            Right (canonical, interface) ->
+              return
+                (U.UpdateModuleAndSendDiagnostics
+                  uri
+                  canonical
+                  (Can._name canonical)
+                  interface
+                  diagnostics
+                )
+
+            _ ->
+              return (U.SendDiagnostics uri diagnostics)
 
 
 textDocumentDidSaveTask :: Model -> TextDocumentDidSaveParams -> Task Msg
@@ -225,7 +273,7 @@ hover id model (RequestMethod.TextDocumentHoverParams (uri, position)) =
       U.SendRequestError id Error.InternalError "Package not initialized"
 
     Just clonedFilePath ->
-      -- TODO: Search for reference with Oracle.hs
+      -- todo: Search for reference with Oracle.hs
       U.SendRequestError id Error.InternalError "Package not initialized"
 
 
@@ -321,25 +369,30 @@ readAndCloneElmProject projectRoot clonedRoot =
 
 
 -- Decode a module
-decodeModule :: Model -> Text -> Maybe Module
-decodeModule model document =
+decodeModule :: Model -> Text -> Task Can.Module
+decodeModule model source =
   let
-      maybeProjectName =
-        model
-          |> M._package
-          |> fmap
-              (\package ->
-                package
-                  |> M._elmProject
-                  |> Project.getName
-              )
+      maybePackage =
+        model |> M._package
   in
-  maybeProjectName
-    |> Misc.andThen
-        (\projectName ->
-          document
-            |> TextEncode.encodeUtf8
-            |> Parse.program projectName
-            |> Misc.andThen ElmResult.ok
-            |> Result.fromElmResult
-        )
+  case maybePackage of
+    Nothing ->
+      Task.throw "No project"
+
+    Just package ->
+      let
+          pkgName =
+            package
+              |> M._elmProject
+              |> Project.getName
+      in
+      LSP.Misc.parseProgram pkgName source
+        |> andThen
+            (\valid ->
+              LSP.Misc.canonicalize
+                pkgName
+                valid
+                (M._foreignImportDict package)
+                (M._localInterfaces package)
+                (M._foreignInterfaces package)
+            )

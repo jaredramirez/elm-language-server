@@ -13,7 +13,9 @@ import qualified Data.ByteString.Lazy        as BS
 import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Map                    (Map)
+import qualified Data.Map                    as Map
 import           Data.Text                   (Text)
+import qualified AST.Canonical               as Can
 import qualified Elm.Compiler.Module         as Module
 import           Elm.Project.Json            (Project)
 import           Elm.Project.Summary         (Summary)
@@ -60,6 +62,12 @@ data Msg
       M.ImportDict
       Module.Interfaces
   | SendDiagnostics URI [Diagnostic]
+  | UpdateModuleAndSendDiagnostics
+      URI
+      Can.Module
+      Module.Canonical
+      Module.Interface
+      [Diagnostic]
   | UpdateElmProjectAndSummary Project Summary
   | RequestShutDown
   | Exit
@@ -86,6 +94,7 @@ update msg model =
                 foreignInterfaces
                 foreignImportDict
                 localInterfaces
+                Map.empty -- Local ASTs, will be populated by on-change handlers
           }
       , SendMany
         [ Message.encode
@@ -111,6 +120,33 @@ update msg model =
 
     SendDiagnostics uri diagnostics ->
       ( model
+      , (uri, diagnostics)
+          |> encodeDiagnostics
+          |> Send
+      , ShouldNotTerminate
+      )
+
+    UpdateModuleAndSendDiagnostics uri canonical moduleName interface diagnostics ->
+      ( model
+          { M._package =
+              model
+                |> M._package
+                |> fmap
+                    (\package ->
+                      package
+                        { M._localInterfaces =
+                          Map.insert
+                            moduleName
+                            interface
+                            (M._localInterfaces package)
+                        , M._asts =
+                          Map.insert
+                            uri
+                            canonical
+                            (M._asts package)
+                        }
+                    )
+              }
       , (uri, diagnostics)
           |> encodeDiagnostics
           |> Send
@@ -204,11 +240,17 @@ encodeDiagnostics tuple =
       |> encode
 
 
+-- INSTANCES
+
+
 instance Show Msg where
   show msg =
     case msg of
       Initialize {} ->
         "Initialize"
+
+      UpdateModuleAndSendDiagnostics {} ->
+        "UpdateModuleAndSendDiagnostics"
 
       SendDiagnostics {} ->
         "SendDiagnostics"

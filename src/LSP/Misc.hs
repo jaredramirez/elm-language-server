@@ -8,20 +8,25 @@ module LSP.Misc
   , copyElmFileTree
   , verifyElmVersion
   , readInterfaces
+  , parseProgram
   , getForeignImportDict
   , getLocalImportDict
-  , combineImportDicts
+  , canonicalize
+  , getInterface
   ) where
 
+import qualified AST.Canonical            as Can
 import qualified AST.Source               as Src
 import qualified AST.Valid                as AST
+import qualified Canonicalize.Module      as Canonicalize
 import           Control.Exception        (SomeException, tryJust)
 import           Control.Monad.Trans      (liftIO)
 import qualified Elm.Compiler.Module      as Module
+import qualified Elm.Interface            as I
+import qualified Elm.Name                 as N
 import           Elm.Project.Json         (Project)
 import qualified Elm.Project.Json         as Project
 import           Elm.Package              as Package
-import           Elm.Project.Json         as Project
 import qualified Data.Binary              as Binary
 import qualified Data.List                as List
 import qualified Data.Maybe               as Maybe
@@ -30,16 +35,21 @@ import qualified Data.Map                 as Map
 import           Data.Semigroup           ((<>))
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
+import qualified Data.Text.Encoding       as TextEncode
 import qualified LSP.Log                  as Log
 import qualified LSP.Model                as M
-import           Misc                     ((<|), (|>))
+import           Misc                     ((<|), (|>), andThen)
+import qualified Parse.Parse              as Parse
 import qualified Reporting.Annotation     as A
+import qualified Reporting.Result         as ElmResult
 import qualified System.Directory         as Dir
 import qualified System.FilePath          as FilePath
 import           System.FilePath          ((</>))
 import qualified System.FilePath.Glob     as Glob
 import           Task                     (Task)
 import qualified Task
+import qualified Type.Constrain.Module    as Type
+import qualified Type.Solve               as Type
 import           System.Exit              as SysE
 import           System.Process           as SysP
 
@@ -261,6 +271,16 @@ readInterface pkgName filePath =
         Task.throw ("File \"" <> Text.pack filePath <> "\" didn't have a valid name")
 
 
+-- Parse into AST
+parseProgram :: Package.Name -> Text -> Task AST.Module
+parseProgram pkgName source =
+  source
+    |> TextEncode.encodeUtf8
+    |> Parse.program pkgName
+    |> andThen ElmResult.ok
+    |> Task.fromElmResult (\_ -> "Failed to validate AST")
+
+
 -- Get imports for a module
 getForeignImportDict :: Module.Interfaces -> M.ImportDict
 getForeignImportDict foreignInterfaces =
@@ -270,11 +290,8 @@ getForeignImportDict foreignInterfaces =
     |> Map.fromList
 
 
-getLocalImportDict :: Project -> AST.Module -> M.ImportDict
-getLocalImportDict project localModule =
-  let
-      pkgName = Project.getName project
-  in
+getLocalImportDict :: Package.Name -> AST.Module -> M.ImportDict
+getLocalImportDict pkgName localModule =
   localModule
     |> AST._imports
     |> List.map
@@ -284,12 +301,42 @@ getLocalImportDict project localModule =
     |> Map.fromList
 
 
--- Note that `combineImportDicts` is left-biased, so any foreign modules imported
--- and created in `localImports` will be overridden by their actual canonical info
--- from `foreignImports`
-combineImportDicts :: M.ImportDict -> M.ImportDict -> M.ImportDict
-combineImportDicts foreignImports localImports =
-  Map.union foreignImports localImports
+-- Get canonicalized version of AST
+canonicalize :: Package.Name -> AST.Module -> M.ImportDict -> Module.Interfaces -> Module.Interfaces -> Task Can.Module
+canonicalize pkgName localModule foreignImportDict localInterfaces foreignInterfaces =
+  let
+      -- Map.union is left-biased, so foreigns override locals
+      importDict =
+        Map.union foreignImportDict (getLocalImportDict pkgName localModule)
+
+      -- Map.union is left-biased, so foreigns override locals
+      interfaces =
+        Map.union foreignInterfaces localInterfaces
+
+  in
+  do
+    liftIO <| Log.logger (Map.toList importDict )
+    Canonicalize.canonicalize pkgName importDict interfaces localModule
+      |> Task.fromElmResult (\_ -> "Failed to canonicalized")
 
 
--- todo: update interface
+
+-- Get canonicalized version of AST
+getInterface :: Can.Module -> Task Module.Interface
+getInterface canonical =
+  fmap (\annotations -> I.fromModule annotations canonical)
+    (getAnnotations canonical)
+
+
+-- Get type annotations from canonical AST
+getAnnotations :: Can.Module -> Task (Map.Map N.Name Can.Annotation)
+getAnnotations canonical =
+  do
+    constraint <- liftIO <| Type.constrain canonical
+    either <- liftIO <| Type.run constraint
+    case either of
+      Left _ ->
+        Task.throw "Failed to get annotations"
+
+      Right annotations ->
+        return annotations

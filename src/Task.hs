@@ -19,7 +19,6 @@ import Control.Exception (SomeException, tryJust)
 import qualified Data.List as List
 import Data.Semigroup ((<>))
 import Data.Text (Text)
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Reporting.Task as ElmTask
 import qualified Reporting.Progress as ElmProgress

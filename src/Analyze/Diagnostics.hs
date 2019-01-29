@@ -253,8 +253,6 @@ outputToDiagnostics filePath (exitCode, _stdOutString, stdErrString) =
 run :: Text -> Text -> Task [Diagnostic]
 run elmExectuablePath filePath =
   do
-    liftIO <| Log.logger filePath
-    liftIO <| Log.logger elmExectuablePath
     processOutput <- liftIO
         (SysP.readProcessWithExitCode
           (Text.unpack elmExectuablePath)
