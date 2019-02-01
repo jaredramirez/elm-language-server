@@ -1,4 +1,4 @@
-.PHONY: build build-deps watch install
+.PHONY: build build-deps watch install test
 
 build:
 	stack build
@@ -11,3 +11,6 @@ watch:
 
 install:
 	stack build --copy-bins
+
+test:
+	stack test

@@ -8,9 +8,7 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import           Analyze.Data.Documentation  (Documentation)
 import qualified Data.ByteString.Lazy        as BS
-import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
 import           Data.Map                    (Map)
 import qualified Data.Map                    as Map

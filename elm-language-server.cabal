@@ -23,23 +23,22 @@ flag dev {
   default: False
 }
 
-executable elm-language-server-exe
+library
   ghc-options:
       -O2 -Wall -Wno-name-shadowing
-
-  main-is: Main.hs
 
   hs-source-dirs:
       src
 
   other-extensions: TemplateHaskell
 
+  exposed-modules:
+      LSP.Server
+      -- FOR TESTING
+      Analyze.Search
+
   other-modules:
-      Analyze.Canonical
-      Analyze.Data.Documentation
-      Analyze.Data.Reference
       Analyze.Diagnostics
-      -- Analyze.Oracle
       LSP.Data.Capabilities
       LSP.Data.Diagnostic
       LSP.Data.DocumentFilter
@@ -62,7 +61,6 @@ executable elm-language-server-exe
       LSP.Log
       LSP.MessageHandler
       LSP.Misc LSP.Model
-      LSP.Server
       LSP.Update
       Misc
       Paths_elm_language_server
@@ -94,6 +92,26 @@ executable elm-language-server-exe
 
   default-language: Haskell2010
 
+executable elm-language-server-exe
+  ghc-options:
+      -O2 -Wall -Wno-name-shadowing
+
+  main-is: Main.hs
+
+  hs-source-dirs:
+      app
+
+  other-extensions: TemplateHaskell
+
+  other-modules:
+      Main
+
+  build-depends:
+      base >=4.8 && <5
+    , elm-language-server
+
+  default-language: Haskell2010
+
 test-suite elm-language-server-test
   type: exitcode-stdio-1.0
 
@@ -109,7 +127,9 @@ test-suite elm-language-server-test
 
   build-depends:
       base >=4.8 && <5
-    , tasty >=1.1.0.3 && <1.2
+    , elm
+    , elm-language-server
+    , tasty
     , tasty-hunit
     , bytestring >=0.9 && <0.11
     , text >=1 && <2

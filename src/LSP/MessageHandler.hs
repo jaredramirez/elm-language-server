@@ -5,7 +5,6 @@ module LSP.MessageHandler
   ) where
 
 import qualified Analyze.Diagnostics         as Diagnostics
--- import qualified Analyze.Oracle              as Oracle
 import qualified AST.Canonical               as Can
 import           Control.Monad.Trans         (liftIO)
 import qualified Elm.Compiler.Module         as Module

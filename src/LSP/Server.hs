@@ -14,7 +14,6 @@ import qualified LSP.Update                  as U
 import qualified LSP.MessageHandler          as MessageHandler
 import qualified System.IO                   as IO
 import qualified Task
-import qualified Analyze.Canonical
 
 run :: IO Int
 run =
