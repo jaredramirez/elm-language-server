@@ -1,3 +1,0 @@
-module Analyze.Hover
-  (
-  ) where

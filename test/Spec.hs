@@ -38,9 +38,6 @@ simpleModule =
        ("module Main exposing (..)\n" <> "\n" <> "hello : String\n" <>
         "hello = \"hello, world\"\n"))
 
-simpleModuleAst :: Valid.Module
-simpleModuleAst = Valid.defaultModule Map.empty [] [] [] [] []
-
 unitTests =
   testGroup
     "Parse Tests"

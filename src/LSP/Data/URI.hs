@@ -13,7 +13,7 @@ import Data.Aeson.Types (ToJSON, FromJSON)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Hashable as H
-import Misc ((<|), (|>))
+import Misc ((<|))
 
 
 newtype URI =

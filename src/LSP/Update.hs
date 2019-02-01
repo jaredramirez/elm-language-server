@@ -8,13 +8,15 @@ module LSP.Update
   , ShouldTermiate(..)
   ) where
 
-import           Analyze.Data.Documentation  (Documentation, ModuleName)
-import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
 import qualified Data.ByteString.Lazy        as BS
-import           Data.HashMap.Strict         (HashMap)
-import qualified Data.HashMap.Strict         as HM
 import           Data.Semigroup              ((<>))
+import           Data.Map                    (Map)
+import qualified Data.Map                    as Map
 import           Data.Text                   (Text)
+import qualified AST.Canonical               as Can
+import qualified Elm.Compiler.Module         as Module
+import           Elm.Project.Json            (Project)
+import           Elm.Project.Summary         (Summary)
 import qualified LSP.Data.Capabilities       as Capabilities
 import           LSP.Data.Error              (Error)
 import qualified LSP.Data.Error              as Error
@@ -27,7 +29,7 @@ import qualified LSP.Data.MessageError       as MessageError
 import qualified LSP.Data.NotificationMethod as NotifMethod
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.URI                (URI)
-import           LSP.Model                   (Model, Module)
+import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           Misc                        ((<|), (|>))
 import           Prelude                     hiding (init)
@@ -47,22 +49,37 @@ data ShouldTermiate
   deriving (Show)
 
 data Msg
-  = Initialize Text Text Text Text ElmVersion ElmConfig (HashMap ModuleName Documentation)
-  | UpdateElmConfig ElmConfig
-  | SetASTAndSendDiagnostics URI (Maybe Module) [Diagnostic]
+  = Initialize
+      Text
+      Text
+      Text
+      Text
+      Project
+      Summary
+      Module.Interfaces
+      M.ImportDict
+      Module.Interfaces
   | SendDiagnostics URI [Diagnostic]
+  | UpdateModuleAndSendDiagnostics
+      URI
+      Can.Module
+      Module.Canonical
+      Module.Interface
+      [Diagnostic]
+  | UpdateElmProjectAndSummary Project Summary
   | RequestShutDown
   | Exit
   | SendRequestError Text Error Text
   | SendNotifError Error Text
   | InvalidElmVersion Text
   | NoOp
-  deriving (Show)
+
+
 
 update :: Msg -> Model -> (Model, Response, ShouldTermiate)
 update msg model =
   case msg of
-    Initialize id projectRoot clonedProjectRoot executable executableVersion config docs ->
+    Initialize id projectRoot clonedProjectRoot executable project summary foreignInterfaces foreignImportDict localInterfaces ->
       ( model
           { M._initialized = True
           , M._package =
@@ -70,10 +87,12 @@ update msg model =
               M.Package projectRoot
                 clonedProjectRoot
                 executable
-                executableVersion
-                config
-                HM.empty
-                docs
+                project
+                summary
+                foreignInterfaces
+                foreignImportDict
+                localInterfaces
+                Map.empty -- Local ASTs, will be populated by on-change handlers
           }
       , SendMany
         [ Message.encode
@@ -85,7 +104,7 @@ update msg model =
         , [ Registration.DidChangeWatchedFiles
               "watching"
               [ FileSystemWatcher.FileSystemWatcher
-                  (projectRoot <> "/" <> M.elmConfigFileName)
+                  (M.elmProjectPath projectRoot)
                   (Just FileChangeType.Changed)
               ]
           ]
@@ -97,52 +116,55 @@ update msg model =
       , ShouldNotTerminate
       )
 
-    UpdateElmConfig elmConfig ->
-      ( model
-          { M._package =
-              model
-                |> M._package
-                |> fmap (\package -> package { M._elmConfig = elmConfig })
-          }
-      , None
-      , ShouldNotTerminate
-      )
-
-    SetASTAndSendDiagnostics uri maybeAST diagnostics ->
-      ( model
-        { M._package =
-            model
-              |> M._package
-              |> fmap
-                (\package ->
-                  package
-                    { M._ASTs =
-                      package
-                        |> M._ASTs
-                        |> HM.alter
-                          (\maybeExisting ->
-                            case maybeAST of
-                              Nothing ->
-                                maybeExisting
-
-                              Just ast ->
-                                Just ast
-                          )
-                          uri
-                    }
-                )
-        }
-      , (uri, diagnostics)
-          |> encodeDiagnostics
-          |> Send
-      , ShouldNotTerminate
-      )
-
     SendDiagnostics uri diagnostics ->
       ( model
       , (uri, diagnostics)
           |> encodeDiagnostics
           |> Send
+      , ShouldNotTerminate
+      )
+
+    UpdateModuleAndSendDiagnostics uri canonical moduleName interface diagnostics ->
+      ( model
+          { M._package =
+              model
+                |> M._package
+                |> fmap
+                    (\package ->
+                      package
+                        { M._localInterfaces =
+                          Map.insert
+                            moduleName
+                            interface
+                            (M._localInterfaces package)
+                        , M._asts =
+                          Map.insert
+                            uri
+                            canonical
+                            (M._asts package)
+                        }
+                    )
+              }
+      , (uri, diagnostics)
+          |> encodeDiagnostics
+          |> Send
+      , ShouldNotTerminate
+      )
+
+    UpdateElmProjectAndSummary elmProject elmSummary ->
+      ( model
+          { M._package =
+              model
+                |> M._package
+                |> fmap
+                    (\package ->
+                      package
+                        { M._elmProject = elmProject
+                        , M._elmSummary = elmSummary
+                        }
+                    )
+              }
+      , None
       , ShouldNotTerminate
       )
 
@@ -214,3 +236,40 @@ encodeDiagnostics tuple =
       |> NotifMethod.PublishDiagnostics
       |> Message.NotificationMessage
       |> encode
+
+
+-- INSTANCES
+
+
+instance Show Msg where
+  show msg =
+    case msg of
+      Initialize {} ->
+        "Initialize"
+
+      UpdateModuleAndSendDiagnostics {} ->
+        "UpdateModuleAndSendDiagnostics"
+
+      SendDiagnostics {} ->
+        "SendDiagnostics"
+
+      UpdateElmProjectAndSummary {} ->
+        "UpdateElmProjectAndSummary"
+
+      RequestShutDown ->
+        "RequestShutDown"
+
+      Exit ->
+        "Exit"
+
+      SendRequestError _ _ _ ->
+        "SendRequestError"
+
+      SendNotifError _ _ ->
+        "SendNotifError"
+
+      InvalidElmVersion _ ->
+        "InvalidElmVersion"
+
+      NoOp ->
+        "NoOp"

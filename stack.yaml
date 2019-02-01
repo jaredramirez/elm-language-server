@@ -1,0 +1,8 @@
+resolver: lts-11.22
+
+packages:
+- .
+
+extra-deps:
+- github: elm-tooling/elm-compiler-library
+  commit: 5354f1f4955131377b1626f8fe75ed823f5525ae

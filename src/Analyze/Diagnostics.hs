@@ -5,13 +5,12 @@ module Analyze.Diagnostics
   , run
   ) where
 
-import Control.Applicative ((<|>))
-import Data.Aeson (FromJSON, Value, (.:), (.:?), (.=))
+import Control.Monad.Trans (liftIO)
+import Data.Aeson (FromJSON, (.:), (.:?))
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as ATypes
 import Data.Aeson.Types (Parser)
 import qualified Data.List as List
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Maybe as Maybe
 import Data.Semigroup ((<>))
 import Data.Text (Text)
@@ -24,11 +23,10 @@ import qualified LSP.Data.Range as Range
 import qualified LSP.Data.Position as Position
 import Misc ((<|), (|>))
 import qualified Misc
-import qualified System.IO as IO
-import System.Directory as Dir
 import System.Exit as SysE
 import System.Process as SysP
-import System.IO as SysIO
+import Task (Task)
+import qualified Task
 
 -- DIAGNOSTICS MessageMeta --
 data MessagePartMeta =
@@ -75,7 +73,7 @@ messageToTextThrowAwayMeta message =
     Str text ->
       text
 
-    Meta meta ->
+    Meta _meta ->
       ""
 
 messageToText :: MessagePart -> Text
@@ -171,10 +169,10 @@ toDiagnostics filePath diagnostics =
   case diagnostics of
     CompileError errors ->
       List.map
-        (\(Error path name problems) ->
+        (\(Error path _name problems) ->
           ( path
           , List.map
-            (\(Problem title range message) ->
+            (\(Problem _title range message) ->
               D.Diagnostic
                 -- LSP protocol uses 0-index line/column numbers and the Elm
                 -- compiler does not. So we decrement each by 1 to get range properly
@@ -220,7 +218,7 @@ toDiagnostics filePath diagnostics =
 
 -- RUN DIAGNOSTICS --
 outputToDiagnostics :: Text -> (SysE.ExitCode, String, String) -> Either Text [Diagnostic]
-outputToDiagnostics filePath (exitCode, stdOutString, stdErrString) =
+outputToDiagnostics filePath (exitCode, _stdOutString, stdErrString) =
   case exitCode of
     SysE.ExitFailure _ ->
       let
@@ -252,14 +250,13 @@ outputToDiagnostics filePath (exitCode, stdOutString, stdErrString) =
     SysE.ExitSuccess ->
       Right []
 
-run :: Text -> Text -> IO (Either Text [Diagnostic])
+run :: Text -> Text -> Task [Diagnostic]
 run elmExectuablePath filePath =
-  Log.logger elmExectuablePath >>
-  Log.logger filePath >>
-  fmap
-    (outputToDiagnostics filePath)
-    (SysP.readProcessWithExitCode
-      (Text.unpack elmExectuablePath)
-      ["make", Text.unpack filePath, "--report=json"]
-      ""
-    )
+  do
+    processOutput <- liftIO
+        (SysP.readProcessWithExitCode
+          (Text.unpack elmExectuablePath)
+          ["make", Text.unpack filePath, "--report=json"]
+          ""
+        )
+    Task.liftEither (outputToDiagnostics filePath processOutput)

@@ -5,19 +5,16 @@ module LSP.MessageHandler
   ) where
 
 import qualified Analyze.Diagnostics         as Diagnostics
-import           Analyze.Data.ElmConfig      (ElmVersion, ElmConfig)
-import qualified Analyze.Data.ElmConfig      as ElmConfig
-import           Analyze.Data.Documentation  (Documentation, ModuleName)
-import qualified Analyze.Data.Documentation  as Documentation
--- import qualified Analyze.Oracle              as Oracle
+import qualified AST.Canonical               as Can
+import           Control.Monad.Trans         (liftIO)
+import qualified Elm.Compiler.Module         as Module
+import           Elm.Project.Json            (Project)
+import qualified Elm.Project.Json            as Project
+import qualified Elm.Project.Summary         as Summary
 import qualified LSP.Data.Error              as Error
 import qualified Data.List                   as List
-import           Data.HashMap.Strict         (HashMap)
-import qualified Data.HashMap.Strict         as HM
-import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
-import qualified Data.Text.Encoding          as TextEncode
 import qualified LSP.Data.FileEvent          as FileEvent
 import qualified LSP.Data.FileChangeType     as FileChangeType
 import           LSP.Data.Message            (Message)
@@ -33,23 +30,28 @@ import           LSP.Data.RequestMethod      (InitializeParams)
 import qualified LSP.Data.RequestMethod      as RequestMethod
 import qualified LSP.Data.URI                as URI
 import           LSP.Data.Diagnostic         (Diagnostic)
+import qualified LSP.Log                     as Log
 import qualified LSP.Misc
 import           LSP.Model                   (Model)
 import qualified LSP.Model                   as M
 import           LSP.Update                  (Msg)
 import qualified LSP.Update                  as U
-import           Misc                        ((|>))
+import           Misc                        ((<|), (|>), andThen)
 import qualified Misc
-import qualified Parse.Parse                 as P
-import qualified Reporting.Result            as R
 import qualified System.Directory            as Dir
+import           System.FilePath             ((</>))
+import qualified System.FilePath             as FilePath
+import qualified Stuff.Verify                as Verify
+import           Task                        (Task, SimpleTask)
+import qualified Task
 
 
-handler :: Model -> Message result -> IO Msg
+handler :: Model -> Message result -> SimpleTask Msg
 handler model incomingMessage =
   case (M._initialized model, incomingMessage) of
     (False, Message.RequestMessage id (RequestMethod.Initialize params)) ->
-      requestInitializeHandler id params
+      requestInitializeTask id params
+        |> Task.mapError (\errorMessage -> U.SendRequestError id Error.InternalError errorMessage)
 
     (False, _) ->
       U.SendNotifError Error.ServerNotInitialized "Server Not Initialized"
@@ -60,18 +62,22 @@ handler model incomingMessage =
         |> return
 
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidOpen params)) ->
-      textDocumentDidOpenHandler model params
+      textDocumentDidOpenTask model params
+        |> Task.mapError (\errorMessage -> U.SendNotifError Error.InternalError errorMessage)
 
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidChange params)) ->
-      textDocumentDidChangeHandler model params
+      textDocumentDidChangeTask model params
+        |> Task.mapError (\errorMessage -> U.SendNotifError Error.InvalidParams errorMessage)
 
     (True, Message.NotificationMessage (NotificationMethod.TextDocumentDidSave params)) ->
-      textDocumentDidSaveHandler model params
+      textDocumentDidSaveTask model params
+        |> Task.mapError (\errorMessage -> U.SendNotifError Error.InternalError errorMessage)
 
     (True, Message.NotificationMessage (NotificationMethod.DidChangeWatchedFiles params)) ->
-      didChangeWatchedFiles model params
+      didChangeWatchedFilesTask model params
+        |> Task.mapError (\errorMessage -> U.SendNotifError Error.InternalError errorMessage)
 
-    (True, Message.RequestMessage id (RequestMethod.TextDocumentHover params)) ->
+    (True, Message.RequestMessage _id (RequestMethod.TextDocumentHover _params)) ->
       U.RequestShutDown
         |> return
 
@@ -88,191 +94,130 @@ handler model incomingMessage =
         |> return
 
 
-requestInitializeHandler:: Text -> InitializeParams -> IO Msg
-requestInitializeHandler id (RequestMethod.InitializeParams uri) =
-    let
-        (URI.URI projectRoot) =
-          uri
+requestInitializeTask:: Text -> InitializeParams -> Task Msg
+requestInitializeTask id (RequestMethod.InitializeParams uri) =
+  do
+    let (URI.URI projectRoot) = uri
+    let clonedProjectRoot = M.cloneProject projectRoot
+    elmExectuable <- LSP.Misc.findElmExectuable projectRoot
+    LSP.Misc.verifyElmVersion elmExectuable
+    elmProject <- readAndCloneElmProject projectRoot clonedProjectRoot
+    elmSummary <- Task.fromElmTask <| Verify.verify (Text.unpack projectRoot) elmProject
+    cloneElmSrc elmProject clonedProjectRoot
+    let foreignInterfaces = Summary._ifaces elmSummary
+    let foreignImportDict = LSP.Misc.getForeignImportDict foreignInterfaces
+    localInterfaces <- LSP.Misc.readInterfaces elmProject projectRoot
+    return
+      (U.Initialize id
+        projectRoot
+        clonedProjectRoot
+        elmExectuable
+        elmProject
+        elmSummary
+        foreignInterfaces
+        foreignImportDict
+        localInterfaces
+      )
 
-        clonedProjectRoot =
-          projectRoot |> M.toCloneProjectRoot
 
-        getExectuableTask :: IO (Either Text Text)
-        getExectuableTask =
-          projectRoot |> LSP.Misc.findElmExectuable
-
-        getElmVersionTask :: Text -> IO (Either Text ElmVersion)
-        getElmVersionTask =
-          LSP.Misc.getElmVersion
-
-        eitherIOMsg =
-          getExectuableTask `bindEitherIO` \exectuable ->
-          getElmVersionTask exectuable `bindEitherIO` \exectuableVersion ->
-            case exectuableVersion of
-              ElmConfig.InvalidVersion ->
-                U.InvalidElmVersion id
-                  |> Right
-                  |> return
-
-              ElmConfig.V0_19 ->
-                elmConfigTask projectRoot clonedProjectRoot `bindEitherIO` \elmConfig ->
-                cloneElmSrcTask elmConfig clonedProjectRoot `bindEitherIO` \_ ->
-                elmDocumentationTask elmConfig `bindEitherIO` \docs ->
-                  U.Initialize id
-                    projectRoot
-                    clonedProjectRoot
-                    exectuable
-                    exectuableVersion
-                    elmConfig
-                    docs
-                    |> Right
-                    |> return
-
-    in
-    eitherIOMsg
-      |> fmap
-          (\either ->
-            case either of
-              Left errorMessage ->
-                U.SendRequestError id Error.InternalError errorMessage
-
-              Right msg ->
-                msg
+textDocumentDidOpenTask:: Model -> TextDocumentDidOpenParams -> Task Msg
+textDocumentDidOpenTask model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, source)) =
+  do
+    let (URI.URI filePath) = uri
+    createFilePath <- createOrGetFileClone model filePath
+    diagnostics <- getDiagnostics model createFilePath
+    eitherCanonicalAndInterface <- getCanonicalAndInterface model source
+    case eitherCanonicalAndInterface of
+      Right (canonical, interface) ->
+        return
+          (U.UpdateModuleAndSendDiagnostics
+            uri
+            canonical
+            (Can._name canonical)
+            interface
+            diagnostics
           )
 
-
-textDocumentDidOpenHandler:: Model -> TextDocumentDidOpenParams -> IO Msg
-textDocumentDidOpenHandler model (NotificationMethod.TextDocumentDidOpenParams (uri, _version, document)) =
-    let
-        (URI.URI filePath) =
-          uri
-
-        maybeModule =
-          decodeModule model document
-
-        eitherIOMsg =
-          createOrGetFileCloneTask model filePath `bindEitherIO` \createFilePath ->
-          diagnosticsTask model createFilePath
-    in
-    eitherIOMsg
-      |> fmap
-        (\either ->
-          case either of
-            Left error ->
-              U.SendNotifError Error.InternalError error
-
-            Right diagnostics ->
-              U.SetASTAndSendDiagnostics uri maybeModule diagnostics
-        )
+      Left _ ->
+        return (U.SendDiagnostics uri diagnostics)
 
 
-textDocumentDidChangeHandler:: Model -> TextDocumentDidChangeParams -> IO Msg
-textDocumentDidChangeHandler model (NotificationMethod.TextDocumentDidChangeParams (uri, _version, contentChanges)) =
-    let
-        (URI.URI filePath) =
-          uri
-
-        lastContentChange =
+textDocumentDidChangeTask:: Model -> TextDocumentDidChangeParams -> Task Msg
+textDocumentDidChangeTask model (NotificationMethod.TextDocumentDidChangeParams (uri, _version, contentChanges)) =
+  do
+    let (URI.URI filePath) = uri
+    let lastContentChange =
           contentChanges
             |> List.reverse
             |> Misc.headSafe
+    case lastContentChange of
+      Nothing ->
+        Task.throw "No document changes received"
 
-
-        eitherIOMsg =
-          case lastContentChange of
-            Nothing ->
-              return (Left "No document changes received")
-
-            Just contentChanges ->
-              let
-                  (NotificationMethod.ContentChange actualContentChanges) =
-                    contentChanges
-
-                  maybeModule =
-                    decodeModule model actualContentChanges
-
-              in
-              createOrGetFileCloneTask model filePath `bindEitherIO` \clonedFilePath ->
-              updateFileContentsTask clonedFilePath actualContentChanges `bindEitherIO` \() ->
-              diagnosticsTask model clonedFilePath `bindEitherIO` \diagnostics ->
-                return (Right (maybeModule, diagnostics))
-    in
-    eitherIOMsg
-      |> fmap
-          (\either ->
-            case either of
-              Left errorMessage ->
-                U.SendNotifError Error.InvalidParams errorMessage
-
-              Right (maybeModule, diagnostics) ->
-                U.SetASTAndSendDiagnostics uri maybeModule diagnostics
-          )
-
-
-textDocumentDidSaveHandler :: Model -> TextDocumentDidSaveParams -> IO Msg
-textDocumentDidSaveHandler model (NotificationMethod.TextDocumentDidSaveParams uri) =
-    let
-        (URI.URI filePath) =
-          uri
-    in
-    diagnosticsTask model filePath
-      |> fmap
-        (\elmMakeResult ->
-          case elmMakeResult of
-            Left error ->
-              U.SendNotifError Error.InternalError error
-
-            Right diagnostics ->
-              U.SendDiagnostics uri diagnostics
-        )
-
-
-didChangeWatchedFiles :: Model -> DidChangeWatchedFilesParams -> IO Msg
-didChangeWatchedFiles model (NotificationMethod.DidChangeWatchedFilesParams params) =
-  let
-      relevantChange =
-        List.foldl
-          (\acc cur@(FileEvent.FileEvent uri changeType)  ->
-            let
-                (URI.URI filePath) =
+      Just (NotificationMethod.ContentChange source) ->
+        do
+          clonedFilePath <- createOrGetFileClone model filePath
+          updateFileContents clonedFilePath source
+          diagnostics <- getDiagnostics model clonedFilePath
+          eitherCanonicalAndInterface <- getCanonicalAndInterface model source
+          case eitherCanonicalAndInterface of
+            Right (canonical, interface) ->
+              return
+                (U.UpdateModuleAndSendDiagnostics
                   uri
-            in
-            if Text.isSuffixOf M.elmConfigFileName filePath then
-              case changeType of
-                FileChangeType.Changed ->
-                  Just cur
+                  canonical
+                  (Can._name canonical)
+                  interface
+                  diagnostics
+                )
 
-                _ ->
-                  acc
-            else
-              acc
-          )
-          Nothing
-          params
+            Left _ ->
+              return (U.SendDiagnostics uri diagnostics)
 
-      task :: IO (Either Text ElmConfig)
-      task =
-        case (M._package model, relevantChange) of
-          (Just package, Just _) ->
-            elmConfigTask (M._projectRoot package) (M._clonedProjectRoot package)
 
-          (_, Nothing) ->
-            return (Left "No relevant changes")
+textDocumentDidSaveTask :: Model -> TextDocumentDidSaveParams -> Task Msg
+textDocumentDidSaveTask model (NotificationMethod.TextDocumentDidSaveParams uri) =
+  do
+    let (URI.URI filePath) = uri
+    diagnostics <- getDiagnostics model filePath
+    return (U.SendDiagnostics uri diagnostics)
 
-          (Nothing, _) ->
-            return (Left "No existing elm data")
 
-  in
-  fmap
-    (\either ->
-      case either of
-        Left error ->
-          U.SendNotifError Error.InternalError error
+didChangeWatchedFilesTask :: Model -> DidChangeWatchedFilesParams -> Task Msg
+didChangeWatchedFilesTask model (NotificationMethod.DidChangeWatchedFilesParams params) =
+  do
+    let relevantChange =
+          List.foldl
+            (\acc cur@(FileEvent.FileEvent uri changeType)  ->
+              let
+                  (URI.URI filePath) =
+                    uri
+              in
+              if Text.isSuffixOf "elm.json" filePath then
+                case changeType of
+                  FileChangeType.Changed ->
+                    Just cur
 
-        Right elmConfig ->
-          U.UpdateElmConfig elmConfig
-    )
-    task
+                  _ ->
+                    acc
+              else
+                acc
+            )
+            Nothing
+            params
+    case (M._package model, relevantChange) of
+      (Just package, Just _) ->
+        do
+          let projectRoot = package |> M._projectRoot
+          elmProject <- readAndCloneElmProject projectRoot (M._clonedProjectRoot package)
+          elmSummary <- Task.fromElmTask <| Verify.verify (projectRoot |> Text.unpack) elmProject
+          return (U.UpdateElmProjectAndSummary elmProject elmSummary)
+
+      (_, Nothing) ->
+        Task.throw "No relevant changes"
+
+      (Nothing, _) ->
+        Task.throw "No existing elm data"
 
 
 hover :: Text -> Model -> RequestMethod.TextDocumentHoverParams -> Msg
@@ -294,7 +239,7 @@ hover id model (RequestMethod.TextDocumentHoverParams (uri, position)) =
       U.SendRequestError id Error.InternalError "Package not initialized"
 
     Just clonedFilePath ->
-      -- TODO: Search for reference with Oracle.hs
+      -- todo: Search for reference with Oracle.hs
       U.SendRequestError id Error.InternalError "Package not initialized"
 
 
@@ -305,36 +250,38 @@ hover id model (RequestMethod.TextDocumentHoverParams (uri, position)) =
 -- This task clones the elm source to a cloned directory.
 -- We do this so we can save chages to the clone and provide
 -- as-you-type diagnostics to the user
-cloneElmSrcTask :: ElmConfig -> Text -> IO (Either Text ())
-cloneElmSrcTask elmConfig clonedProjectRoot =
+cloneElmSrc :: Project -> Text -> Task ()
+cloneElmSrc project clonedProjectRoot =
   let
       sourceDirectories =
-        ElmConfig.getElmSourceDirectories elmConfig
+        case project of
+          Project.App (Project.AppInfo {Project._app_source_dirs = dirs}) ->
+            dirs
+
+          Project.Pkg (Project.PkgInfo {}) ->
+            ["."]
+
+      clonedProjectRootString =
+        Text.unpack clonedProjectRoot
   in
-  sequence
-    (List.map
-      (\path ->
-        LSP.Misc.copyElmFileTree
-          (clonedProjectRoot <> "/" <> path)
-          path
-      )
-      sourceDirectories
-    ) >>=
-    \listOfEithers ->
-      return
-        (listOfEithers
-          |> sequence
-          |> fmap (\_ -> ())
+  sourceDirectories
+    |> List.map
+        (\path ->
+          do
+            baseTargetPath <- liftIO <| Dir.makeAbsolute (clonedProjectRootString </> path)
+            baseSourcePath <- liftIO <| Dir.makeAbsolute path
+            LSP.Misc.copyElmFileTree baseTargetPath baseSourcePath
         )
+    |> sequence_
 
 
 -- This task runs the elm compiler with the flag `--report=json` on
 -- the given file and parses the results
-diagnosticsTask :: Model -> Text -> IO (Either Text [Diagnostic])
-diagnosticsTask model filePath =
+getDiagnostics :: Model -> Text -> Task [Diagnostic]
+getDiagnostics model filePath =
   case M._package model of
     Nothing ->
-      return (Left "Elm exectuable was not found")
+      Task.throw "Elm exectuable was not found"
 
     Just package ->
       Diagnostics.run (M._exectuable package) filePath
@@ -342,101 +289,94 @@ diagnosticsTask model filePath =
 
 -- This task writes the given changes (it expects the whole file) to the
 -- give path
-updateFileContentsTask :: Text -> Text -> IO (Either Text ())
-updateFileContentsTask filePath nextContent =
+updateFileContents :: Text -> Text -> Task ()
+updateFileContents filePath nextContent =
   writeFile (Text.unpack filePath) (Text.unpack nextContent)
-    |> LSP.Misc.ioToEither
+    |> Task.lift
 
 
 -- This task takes the filePath given, and clones it (and it's parent directories)
 -- to the source clone
-createOrGetFileCloneTask :: Model -> Text -> IO (Either Text Text)
-createOrGetFileCloneTask model fullFilePath =
-  let
-      maybeClonedFilePath =
-        M.switchProjectRootWithClonedProjectRoot model fullFilePath
-  in
-  case maybeClonedFilePath of
-    Nothing ->
-      return (Left "Issue getting cloned file path")
+createOrGetFileClone :: Model -> Text -> Task Text
+createOrGetFileClone model fullFilePath =
+  do
+    let maybeClonedFilePath = M.switchProjectRootWithClonedProjectRoot model fullFilePath
+    case maybeClonedFilePath of
+      Nothing ->
+        Task.throw "Issue getting cloned file path"
 
-    Just clonedFilePath ->
-      let
-          fullFilePathString =
-            Text.unpack fullFilePath
-
-          clonedFilePathString =
-            Text.unpack clonedFilePath
-
-          parentDir =
-            LSP.Misc.getFileParentDir clonedFilePathString
-      in
-      LSP.Misc.ioToEither (Dir.doesFileExist clonedFilePathString) `bindEitherIO`
-        \doesExist ->
+      Just clonedFilePath ->
+        do
+          let fullFilePathString = Text.unpack fullFilePath
+          let clonedFilePathString = Text.unpack clonedFilePath
+          let parentDir = FilePath.takeDirectory clonedFilePathString
+          doesExist <- Task.lift <| Dir.doesFileExist clonedFilePathString
           if doesExist then
-            return (Right clonedFilePath)
+            return clonedFilePath
 
           else
-            Dir.createDirectoryIfMissing True parentDir >>
-            Dir.copyFile fullFilePathString clonedFilePathString >>
-            return (Right clonedFilePath)
+            do
+              liftIO <| Dir.createDirectoryIfMissing True parentDir
+              liftIO <| Dir.copyFile fullFilePathString clonedFilePathString
+              return clonedFilePath
 
 
--- This task parses elm.json and clones it to our source clone
-elmConfigTask :: Text -> Text -> IO (Either Text ElmConfig)
-elmConfigTask projectRoot clonedRoot =
-  let
-      elmConfigPath =
-        (projectRoot <> "/" <> M.elmConfigFileName)
-
-      elmConfigPathString =
-        Text.unpack elmConfigPath
-
-      clonedRootString =
-        Text.unpack clonedRoot
-
-      clonedElmConfigPathString =
-        clonedRootString ++ Text.unpack ("/" <> M.elmConfigFileName)
-  in
-  ElmConfig.parseFromFile elmConfigPath `bindEitherIO` \elmConfig ->
-    Dir.createDirectoryIfMissing True clonedRootString >>
-    Dir.copyFile elmConfigPathString clonedElmConfigPathString >>
-    return (Right elmConfig)
+-- Parse elm.json and clone it to our source clone
+readAndCloneElmProject :: Text -> Text -> Task Project
+readAndCloneElmProject projectRoot clonedRoot =
+  do  let projectPath = M.elmProjectPath projectRoot
+      let projectPathString = Text.unpack projectPath
+      let clonedRootString = Text.unpack clonedRoot
+      let clonedProjectPathString = Text.unpack (M.elmProjectPath clonedRoot)
+      project <- Task.fromElmTask (Project.read projectPathString)
+      liftIO <| Dir.createDirectoryIfMissing True clonedRootString
+      liftIO <| Dir.copyFile projectPathString clonedProjectPathString
+      return project
 
 
--- This task read and parses all documentation of 3rd party modules (direct dependencies)
-elmDocumentationTask :: ElmConfig -> IO (Either Text (HashMap ModuleName Documentation))
-elmDocumentationTask elmConfig =
-  elmConfig
-    |> ElmConfig.getElmDependencies
-    |> Documentation.readDocumentationFromDependencies
+
+-- This is werid, but make a task always succeds
+-- with it's success value an Either. We do this
+-- because we don't want the failure to decode or
+-- to getting an interface to fail this entire
+-- message handler
+getCanonicalAndInterface :: Model -> Text -> Task (Either Text (Can.Module, Module.Interface))
+getCanonicalAndInterface model source =
+  decodeModule model source
+    |> andThen
+        (\canonical ->
+          LSP.Misc.getInterface canonical
+            |> fmap (\interface -> (canonical, interface))
+        )
+    |> Task.try
+    |> liftIO
 
 
 -- Decode a module
-decodeModule :: Model -> Text -> Maybe M.Module
-decodeModule model document =
+decodeModule :: Model -> Text -> Task Can.Module
+decodeModule model source =
   let
-      byteString =
-        TextEncode.encodeUtf8 document
-
-      maybeName =
-        model
-          |> M._package
-          |> fmap (ElmConfig.getName . M._elmConfig)
+      maybePackage =
+        model |> M._package
   in
-  maybeName
-    |> fmap (\name -> P.module_ name byteString)
-    |> Misc.andThen Misc.eitherToMaybe
+  case maybePackage of
+    Nothing ->
+      Task.throw "No project"
 
-
-
--- HELPERS
-bindEitherIO :: IO (Either err resultA) -> (resultA -> IO (Either err resultB)) -> IO (Either err resultB)
-bindEitherIO io func =
-  io >>= \either ->
-    case either of
-      Left err ->
-        return (Left err)
-
-      Right value ->
-        func value
+    Just package ->
+      let
+          pkgName =
+            package
+              |> M._elmProject
+              |> Project.getName
+      in
+      LSP.Misc.parseProgram pkgName source
+        |> andThen
+            (\valid ->
+              LSP.Misc.canonicalize
+                pkgName
+                valid
+                (M._foreignImportDict package)
+                (M._localInterfaces package)
+                (M._foreignInterfaces package)
+            )
