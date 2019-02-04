@@ -30,3 +30,6 @@ A few general notes on contributing.
 - The types in haskell do a good job doing simple self-documenting, however if something you're
 working on is counter-intuitive then please add comments explaining why you're doing what you're
 doing
+
+
+Also, this a part-time project for me so if you open an issue or reach out it make take me a few days to get back to you.
