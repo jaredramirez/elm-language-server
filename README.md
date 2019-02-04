@@ -37,4 +37,4 @@ This project is still in pretty early development, so the feature set is current
 
 ## Contributing
 
-Check out `CONTRIBUTING.md`.
+Check out [`CONTRIBUTING.md`](CONTRIBUTING.md).
