@@ -1,5 +1,6 @@
 module Analyze.Search
   ( findValueInModule
+  , Value(..)
   ) where
 
 

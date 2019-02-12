@@ -36,6 +36,9 @@ library
       LSP.Server
       -- FOR TESTING
       Analyze.Search
+      LSP.Misc
+      Misc
+      Task
 
   other-modules:
       Analyze.Diagnostics
@@ -60,12 +63,10 @@ library
       LSP.Data.URI
       LSP.Log
       LSP.MessageHandler
-      LSP.Misc LSP.Model
+      LSP.Model
       LSP.Update
-      Misc
       Paths_elm_language_server
       Result
-      Task
 
   build-depends:
       base >=4.8 && <5
@@ -102,9 +103,6 @@ executable elm-language-server-exe
       app
 
   other-extensions: TemplateHaskell
-
-  other-modules:
-      Main
 
   build-depends:
       base >=4.8 && <5
