@@ -1,6 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Analyze.Search
-  ( findValueInModule
+  ( getInfo
+  , Location(..)
   , Value(..)
+  , Type(..)
   ) where
 
 
@@ -10,26 +14,83 @@ import qualified AST.Module.Name as ModuleName
 import qualified Elm.Name as N
 import qualified Data.List as List
 import qualified Data.Map as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Reporting.Annotation as A
+import qualified Reporting.Doc as D
 import qualified Reporting.Region as R
+import qualified Reporting.Render.Type.Localizer as L
+import qualified Reporting.Render.Type as RenderType
 import Misc (andThen, (|>), (<|))
 
 
-data Value
-  = Raw N.Name
-  | Qualified ModuleName.Canonical N.Name
+-- Hover
 
 
-data Location
-  = Location Int Int
+data HoverResult
+  = HoverType Text
+  | HoverReference ModuleName.Canonical N.Name
+  | HoverDebug String
 
 
-findValueInModule :: Module -> Int -> Int -> Maybe Value
-findValueInModule modul line column =
+hover :: Module -> L.Localizer -> Int -> Int -> Maybe HoverResult
+hover modul localizer line column =
   let
       location =
         Location line column
+
+      maybeInfo =
+        getInfo modul location
   in
+  maybeInfo
+    |> andThen
+        (\info ->
+          case info of
+            RawName _ ->
+              Nothing
+
+            Reference canonical name ->
+              HoverReference canonical name
+                |> Just
+
+            Type (Primitive name) ->
+              HoverType (N.toText name)
+                |> Just
+
+            Type (Definition tipe) ->
+              RenderType.canToDoc localizer RenderType.None tipe
+                |> D.toString
+                |> Text.pack
+                |> HoverType
+                |> Just
+
+            Debug message ->
+              HoverDebug message
+                |> Just
+        )
+
+
+-- Base search
+
+
+data Value
+  = RawName N.Name
+  | Reference ModuleName.Canonical N.Name
+  | Type Type
+  | Debug String
+
+
+data Type
+  = Primitive N.Name
+  | Definition Can.Type
+
+
+data Location
+  = Location {_row :: Int, _col :: Int}
+
+
+getInfo :: Module -> Location -> Maybe Value
+getInfo modul location =
   modul
     |> Can._decls
     |> foldlDelcs
@@ -67,12 +128,12 @@ searchDefinitions location definitions =
 searchDefinition :: Location -> Can.Def ->  Maybe Value
 searchDefinition location definition =
   case definition of
-    Can.Def locatedDefinitionName patterns expression ->
+    Can.Def locatedDefinition patterns expression ->
       let
           thisDefinition =
-            locatedDefinitionName
+            locatedDefinition
               |> isWithin location
-              |> fmap Raw
+              |> fmap RawName
 
           thisPatterns =
             searchPatterns location patterns
@@ -81,17 +142,27 @@ searchDefinition location definition =
             searchExpression location expression
       in
       thisDefinition
-        |> ifNothingThen thisPatterns
+        |> ifNothingThen thisExpression
         |> ifNothingThen thisExpression
 
-    Can.TypedDef locatedDefinitionName typeVariables typedPatterns expression resultType ->
+    Can.TypedDef locatedDefinition _typeVariables typedPatterns expression resultType ->
       let
-          isThisDefinition =
-            locatedDefinitionName
+          thisDefinition =
+            locatedDefinition
               |> isWithin location
-              |> fmap Raw
+              |> fmap RawName
+
+          thisPatterns =
+            typedPatterns
+              |> List.map fst
+              |> searchPatterns location
+
+          thisExpression =
+            searchExpression location expression
       in
-      isThisDefinition
+      thisDefinition
+        |> ifNothingThen thisPatterns
+        |> ifNothingThen thisExpression
 
 
 searchPatterns :: Location -> [Can.Pattern] -> Maybe Value
@@ -113,7 +184,7 @@ searchPattern location locatedPattern =
           case pattern of
             Can.PAlias locatedSubPattern name ->
               searchPattern location locatedSubPattern
-                |> ifNothingThen (Just <| Raw name)
+                |> ifNothingThen (Just <| RawName name)
 
             Can.PTuple locatedPatternA locatedPatternB maybeLocatedWrapper ->
               searchPattern location locatedPatternA
@@ -128,7 +199,7 @@ searchPattern location locatedPattern =
                 |> ifNothingThen (searchPattern location locatedPatternB)
 
             Can.PCtor {Can._p_home = canoncial, Can._p_type = typeName} ->
-              Just (Qualified canoncial typeName)
+              Just (Reference canoncial typeName)
 
             _ ->
               Nothing
@@ -146,29 +217,47 @@ searchExpressions location expressions =
 
 
 searchExpression :: Location -> Can.Expr -> Maybe Value
-searchExpression location locationExpression =
-  locationExpression
+searchExpression location locatedExpression =
+  locatedExpression
     |> isWithin location
     |> andThen
         (\expression ->
           case expression of
             Can.VarLocal name ->
-              Just <| Raw name
+              Just <| RawName name
 
             Can.VarTopLevel canoncial name ->
-              Just <| Qualified canoncial name
+              Just <| Reference canoncial name
 
             Can.VarForeign canoncial name _ ->
-              Just <| Qualified canoncial name
+              Just <| Reference canoncial name
 
             Can.VarCtor _ canoncial name _ _ ->
-              Just <| Qualified canoncial name
+              Just <| Reference canoncial name
 
             Can.VarDebug canoncial name _ ->
-              Just <| Qualified canoncial name
+              Just <| Reference canoncial name
 
             Can.VarOperator name canoncial _ _ ->
-              Just <| Qualified canoncial name
+              Just <| Reference canoncial name
+
+            Can.Chr _ ->
+              N.fromText "Char"
+                |> Primitive
+                |> Type
+                |> Just
+
+            Can.Str _ ->
+              N.fromText "String"
+                |> Primitive
+                |> Type
+                |> Just
+
+            Can.Float _ ->
+              N.fromText "Float"
+                |> Primitive
+                |> Type
+                |> Just
 
             Can.List locatedExpresions ->
               searchExpressions location locatedExpresions
@@ -176,10 +265,10 @@ searchExpression location locationExpression =
             Can.Negate subExpression ->
               searchExpression location subExpression
 
-            Can.Binop _ canoncial name _ subExpressionA subExpressionB ->
+            Can.Binop binopName canoncial _ _ subExpressionA subExpressionB ->
               searchExpression location subExpressionA
                 |> ifNothingThen (searchExpression location subExpressionB)
-                |> ifNothingThen (Just <| Qualified canoncial name)
+                |> ifNothingThen (Just <| Reference canoncial binopName)
 
             Can.Lambda subPatterns expression ->
               searchExpression location expression
@@ -220,12 +309,12 @@ searchExpression location locationExpression =
                 |> ifNothingThen (searchCaseBranches location caseBranches)
 
             Can.Accessor name ->
-              Just (Raw name)
+              Just (RawName name)
 
             Can.Access expresion locatedName ->
               locatedName
                 |> isWithin location
-                |> fmap Raw
+                |> fmap RawName
                 |> ifNothingThen (searchExpression location expresion)
 
             Can.Update name expression fieldUpdates ->
@@ -237,7 +326,7 @@ searchExpression location locationExpression =
                           (\maybeFound (_ , Can.FieldUpdate region expression) ->
                             maybeFound
                               |> ifNothingThen
-                                (if isWithinRegion location region then
+                                (if location |> isWithinRegion region then
                                   searchExpression location expression
 
                                  else
@@ -247,7 +336,7 @@ searchExpression location locationExpression =
                           Nothing
 
                     )
-                |> ifNothingThen (Just <| Raw name)
+                |> ifNothingThen (Just <| RawName name)
 
             Can.Record map ->
               map
@@ -258,6 +347,12 @@ searchExpression location locationExpression =
                         |> ifNothingThen (searchExpression location expression)
                     )
                     Nothing
+
+            Can.Unit ->
+              N.fromText "()"
+                |> Primitive
+                |> Type
+                |> Just
 
             Can.Tuple subExpressionA subExpressionB wrapperExpression->
               searchExpression location subExpressionA
@@ -293,22 +388,36 @@ ifNothingThen nextMaybe curMaybe =
 
 
 isWithin :: Location -> A.Located value -> Maybe value
-isWithin (Location searchLine searchCol) (A.At region value) =
-  let
-      (R.Region (R.Position startLine startCol) (R.Position endLine endCol)) =
-        region
-  in
-  if
-    (searchLine >= startLine && searchCol >= startCol)
-      && (searchLine <= endLine && searchCol >= endCol)
-  then
+isWithin location (A.At region value) =
+  if location |> isWithinRegion region then
     Just value
 
   else
     Nothing
 
 
-isWithinRegion :: Location -> R.Region -> Bool
-isWithinRegion (Location searchLine searchCol) (R.Region (R.Position startLine startCol) (R.Position endLine endCol)) =
+isWithinRegion :: R.Region -> Location -> Bool
+isWithinRegion (R.Region (R.Position startLine startCol) (R.Position endLine endCol)) (Location searchLine searchCol) =
   (searchLine >= startLine && searchCol >= startCol)
-    && (searchLine <= endLine && searchCol >= endCol)
+    && (searchLine <= endLine && searchCol <= endCol)
+
+
+-- Debug Helpers
+
+
+locationToString ::  Location -> String
+locationToString (Location searchLine searchCol) =
+    "(" ++ (show searchLine) ++ ", " ++ (show searchCol) ++ ")"
+
+
+locatedToString :: A.Located value -> String
+locatedToString (A.At (R.Region (R.Position startLine startCol) (R.Position endLine endCol)) value) =
+    "Start: ("
+      ++ (show startLine)
+      ++ ", "
+      ++ (show startCol)
+      ++ ") End: ("
+      ++ (show endLine)
+      ++ ", "
+      ++ (show endCol)
+      ++ ")"

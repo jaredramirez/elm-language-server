@@ -1,4 +1,12 @@
 module Main exposing (..)
 
-hello : String
-hello = "hello, world"
+
+first = "hello, world"
+
+
+second : ()
+second = ()
+
+
+third : String -> String
+third arg = "appended" ++ arg

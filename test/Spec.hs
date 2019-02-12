@@ -16,6 +16,7 @@ import qualified Analyze.Search         as Search
 import qualified AST.Valid              as Valid
 import qualified AST.Canonical          as Can
 import qualified Canonicalize.Module    as Canonicalize
+import qualified Elm.Name               as N
 import qualified Elm.Package            as Pkg
 import qualified Elm.Project.Json       as Project
 import qualified Elm.Project.Summary    as Summary
@@ -35,21 +36,62 @@ tests :: TestTree
 tests = testGroup "Tests" [unitTests]
 
 
--- AST Parse Test
-toWord8 :: Text -> [Word8]
-toWord8 = Text.foldr (\c acc -> fromIntegral (Char.ord c) : acc) []
+-- Test Helpers
 
 
-simpleModuleName :: Pkg.Name
-simpleModuleName = Pkg.Name "Jared Ramirez" "Simple"
+testPkgName :: Pkg.Name
+testPkgName = Pkg.Name "Jared Ramirez" "Test"
 
 
-simpleModule :: BS.ByteString
-simpleModule =
-  BS.pack
-    (toWord8
-       ("module Main exposing (..)\n" <> "\n" <> "hello : String\n" <>
-        "hello = \"hello, world\"\n"))
+parse :: Task.Task Valid.Module
+parse =
+  do
+    raw <-
+      BS.readFile "./test/sample/src/Main.elm"
+        |> Task.lift
+
+    Parse.program testPkgName raw
+      |> Task.fromElmResult (\_ -> "Failed to parse")
+
+
+parseAndCanonicalize :: Task.Task Can.Module
+parseAndCanonicalize =
+  do
+    parsed <- parse
+
+    project <-
+      Project.read "./test/sample/elm.json"
+        |> Task.fromElmTask
+
+    ifaces <-
+      Verify.verify "./test/safe" project
+        |> Task.fromElmTask
+        |> fmap Summary._ifaces
+
+    let importDict =
+          LSPMisc.getForeignImportDict ifaces
+
+    Canonicalize.canonicalize testPkgName importDict ifaces parsed
+      |> Task.fromElmResult (\_ -> "Failed to canonicalize")
+
+
+searchModule :: Int -> Int -> Task.Task Search.Value
+searchModule line column =
+  do
+    canonical <-
+      parseAndCanonicalize
+
+    let maybeFound =
+          Search.getInfo canonical (Search.Location line column)
+
+    case maybeFound of
+      Nothing ->
+        Task.throw "Not found"
+
+      Just found ->
+        return found
+
+-- Tests
 
 
 unitTests :: TestTree
@@ -58,80 +100,82 @@ unitTests =
     "Parse Tests"
     [ testCase
         "Parse Module"
-        (case Result.run $ Parse.program simpleModuleName simpleModule of
-           (_, Left _) -> assertFailure "Failed to parse"
-           (_, Right _) -> return ()
+        (Task.try parse >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right _ -> return ()
         )
     , testCase
         "Canoncailize Module"
-        (let
-            task =
-              do
-                parsed <-
-                  Parse.program simpleModuleName simpleModule
-                    |> Task.fromElmResult (\_ -> "Failed to parse")
-
-                project <-
-                  Project.read "./test/sample/elm.json"
-                    |> Task.fromElmTask
-
-                ifaces <-
-                  Verify.verify "./test/safe" project
-                    |> Task.fromElmTask
-                    |> fmap Summary._ifaces
-
-                let importDict =
-                      LSPMisc.getForeignImportDict ifaces
-
-                canonical <-
-                  Canonicalize.canonicalize simpleModuleName importDict ifaces parsed
-                    |> Task.fromElmResult (\_ -> "Failed to canonicalize")
-
-                return canonical
-         in
-         Task.try task >>= \result ->
+        (Task.try parseAndCanonicalize >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right _ -> return ()
         )
     , testCase
-        "Top-level value search"
-        (let
-            task =
-              do
-                parsed <-
-                  Parse.program simpleModuleName simpleModule
-                    |> Task.fromElmResult (\_ -> "Failed to parse")
-
-                project <-
-                  Project.read "./test/sample/elm.json"
-                    |> Task.fromElmTask
-
-                ifaces <-
-                  Verify.verify "./test/safe" project
-                    |> Task.fromElmTask
-                    |> fmap Summary._ifaces
-
-                let importDict =
-                      LSPMisc.getForeignImportDict ifaces
-
-                canonical <-
-                  Canonicalize.canonicalize simpleModuleName importDict ifaces parsed
-                    |> Task.fromElmResult (\_ -> "Failed to canonicalize")
-
-                let maybeFound =
-                      Search.findValueInModule canonical 4 11
-
-                case maybeFound of
-                  Nothing ->
-                    Task.throw "Not found"
-
-                  Just _ ->
-                    return ()
-         in
-         Task.try task >>= \result ->
+        "Top-level un-typed primitive search"
+        (Task.try (searchModule 4 11) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
-             Right _ -> return ()
+             Right value ->
+                case value of
+                  Search.Type (Search.Primitive name) ->
+                    case N.toText name of
+                        "String" ->
+                          return ()
+
+                        invalid ->
+                          assertFailure
+                            ("Got a type primitive but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+
+                  Search.Debug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected primitive type"
+        )
+    , testCase
+        "Top-level typed primitive search"
+        (Task.try (searchModule 8 10) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.Type (Search.Primitive name) ->
+                    case N.toText name of
+                        "()" ->
+                          return ()
+
+                        invalid ->
+                          assertFailure
+                            ("Got a type primitive but was \"" ++ Text.unpack invalid ++ "\" instead of \"()\"")
+
+                  Search.Debug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected primitive type"
+        )
+    , testCase
+        "Top-level type definition search"
+        (Task.try (searchModule 12 24) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.Reference canonical name ->
+                    case N.toText name of
+                        "++" ->
+                          return ()
+
+                        invalid ->
+                          assertFailure
+                            ("Got a reference but the name was \"" ++ Text.unpack invalid ++ "\" instead of \"++\"")
+
+                  Search.Debug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected reference"
         )
     ]
