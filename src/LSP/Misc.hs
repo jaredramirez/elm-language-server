@@ -13,6 +13,7 @@ module LSP.Misc
   , getLocalImportDict
   , canonicalize
   , getInterface
+  , getAnnotations
   ) where
 
 import qualified AST.Canonical            as Can

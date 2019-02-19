@@ -34,7 +34,8 @@ library
 
   exposed-modules:
       LSP.Server
-      -- FOR TESTING
+
+      -- Exposed for testing
       Analyze.Search
       LSP.Misc
       Misc

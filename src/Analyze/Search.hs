@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Analyze.Search
-  ( getInfo
+  ( hover
+  , HoverResult(..)
+  , getInfo
   , Location(..)
   , Value(..)
   , Type(..)
@@ -14,14 +16,19 @@ import qualified AST.Module.Name as ModuleName
 import qualified Elm.Name as N
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
+import Data.Semigroup ((<>))
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified LSP.Misc
+import Misc (andThen, (|>), (<|))
 import qualified Reporting.Annotation as A
 import qualified Reporting.Doc as D
 import qualified Reporting.Region as R
 import qualified Reporting.Render.Type.Localizer as L
 import qualified Reporting.Render.Type as RenderType
-import Misc (andThen, (|>), (<|))
+import Task (Task)
+import qualified Task
 
 
 -- Hover
@@ -33,7 +40,7 @@ data HoverResult
   | HoverDebug String
 
 
-hover :: Module -> L.Localizer -> Int -> Int -> Maybe HoverResult
+hover :: Module -> L.Localizer -> Int -> Int -> Task HoverResult
 hover modul localizer line column =
   let
       location =
@@ -42,39 +49,66 @@ hover modul localizer line column =
       maybeInfo =
         getInfo modul location
   in
-  maybeInfo
-    |> andThen
-        (\info ->
-          case info of
-            RawName _ ->
-              Nothing
+  case maybeInfo of
+    Nothing ->
+      Task.throw "Nothing Found"
 
-            Reference canonical name ->
-              HoverReference canonical name
-                |> Just
+    Just info ->
+      case info of
+        Raw name ->
+          -- HoverType (N.toText name)
+          HoverDebug "Not quite right"
+            |> return
 
-            Type (Primitive name) ->
-              HoverType (N.toText name)
-                |> Just
+        InferredArg functionName argNumber variableName ->
+          do
+            annotations <- LSP.Misc.getAnnotations modul
+            let maybeArgType =
+                  annotations
+                    |> Map.lookup functionName
+                    |> andThen
+                        (\(Can.Forall _ tipe) ->
+                          getArgAtPosition argNumber tipe
+                        )
+            case maybeArgType of
+              Nothing ->
+                Task.throw "Arg not found"
 
-            Type (Definition tipe) ->
-              RenderType.canToDoc localizer RenderType.None tipe
-                |> D.toString
-                |> Text.pack
-                |> HoverType
-                |> Just
+              Just result ->
+                HoverType (typeToText result)
+                  |> return
 
-            Debug message ->
-              HoverDebug message
-                |> Just
-        )
+        Arg variableName tipe ->
+          HoverType (typeToText tipe)
+            |> return
+
+        Reference canonical name ->
+          HoverReference canonical name
+            |> return
+
+        Type (Primitive name) ->
+          HoverType (N.toText name)
+            |> return
+
+        Type (Definition tipe) ->
+          RenderType.canToDoc localizer RenderType.None tipe
+            |> D.toString
+            |> Text.pack
+            |> HoverType
+            |> return
+
+        Debug message ->
+          HoverDebug message
+            |> return
 
 
 -- Base search
 
 
 data Value
-  = RawName N.Name
+  = Raw N.Name
+  | InferredArg N.Name Int N.Name
+  | Arg N.Name Can.Type
   | Reference ModuleName.Canonical N.Name
   | Type Type
   | Debug String
@@ -133,16 +167,51 @@ searchDefinition location definition =
           thisDefinition =
             locatedDefinition
               |> isWithin location
-              |> fmap RawName
+              |> fmap Raw
 
           thisPatterns =
             searchPatterns location patterns
 
           thisExpression =
             searchExpression location expression
+              |> andThen
+                  -- If we find a raw value, then check the function arguements to
+                  -- see if the raw value matches any
+                  (\found ->
+                    case found of
+                      Raw name ->
+                        patterns
+                          |> List.zip [1..]
+                          |> List.foldr
+                              (\(index, curPattern) acc ->
+                                case acc of
+                                  Nothing ->
+                                    case unboxLocated curPattern of
+                                      Can.PVar argName ->
+                                        if argName == name then
+                                          Just (InferredArg (unboxLocated locatedDefinition) index name)
+
+                                        else
+                                          acc
+
+                                      -- TODO: Search inside other patterns for matching
+                                      -- names
+
+                                      _ ->
+                                        acc
+
+                                  Just _ ->
+                                    acc
+                              )
+                              Nothing
+                          |> ifNothingThen (Just found)
+
+                      _ ->
+                        Just found
+                  )
       in
       thisDefinition
-        |> ifNothingThen thisExpression
+        |> ifNothingThen thisPatterns
         |> ifNothingThen thisExpression
 
     Can.TypedDef locatedDefinition _typeVariables typedPatterns expression resultType ->
@@ -150,7 +219,7 @@ searchDefinition location definition =
           thisDefinition =
             locatedDefinition
               |> isWithin location
-              |> fmap RawName
+              |> fmap Raw
 
           thisPatterns =
             typedPatterns
@@ -159,6 +228,38 @@ searchDefinition location definition =
 
           thisExpression =
             searchExpression location expression
+              |> andThen
+                  (\found ->
+                    case found of
+                      Raw name ->
+                        typedPatterns
+                          |> List.foldr
+                              (\(curPattern, curType) acc ->
+                                case acc of
+                                  Nothing ->
+                                    case unboxLocated curPattern of
+                                      Can.PVar argName ->
+                                        if argName == name then
+                                          Just (Arg name curType)
+
+                                        else
+                                          acc
+
+                                      -- TODO: Search inside other patterns for matching
+                                      -- names
+
+                                      _ ->
+                                        acc
+
+                                  Just _ ->
+                                    acc
+                              )
+                              Nothing
+                          |> ifNothingThen (Just found)
+
+                      _ ->
+                        Just found
+                  )
       in
       thisDefinition
         |> ifNothingThen thisPatterns
@@ -184,7 +285,7 @@ searchPattern location locatedPattern =
           case pattern of
             Can.PAlias locatedSubPattern name ->
               searchPattern location locatedSubPattern
-                |> ifNothingThen (Just <| RawName name)
+                |> ifNothingThen (Just <| Raw name)
 
             Can.PTuple locatedPatternA locatedPatternB maybeLocatedWrapper ->
               searchPattern location locatedPatternA
@@ -218,13 +319,20 @@ searchExpressions location expressions =
 
 searchExpression :: Location -> Can.Expr -> Maybe Value
 searchExpression location locatedExpression =
+  let
+      searchSubExpression =
+        searchExpression location
+
+      searchSubExpressions =
+        searchExpressions location
+  in
   locatedExpression
     |> isWithin location
     |> andThen
         (\expression ->
           case expression of
             Can.VarLocal name ->
-              Just <| RawName name
+              Just <| Raw name
 
             Can.VarTopLevel canoncial name ->
               Just <| Reference canoncial name
@@ -260,65 +368,65 @@ searchExpression location locatedExpression =
                 |> Just
 
             Can.List locatedExpresions ->
-              searchExpressions location locatedExpresions
+              searchSubExpressions locatedExpresions
 
             Can.Negate subExpression ->
-              searchExpression location subExpression
+              searchSubExpression subExpression
 
             Can.Binop binopName canoncial _ _ subExpressionA subExpressionB ->
-              searchExpression location subExpressionA
-                |> ifNothingThen (searchExpression location subExpressionB)
+              searchSubExpression subExpressionA
+                |> ifNothingThen (searchSubExpression subExpressionB)
                 |> ifNothingThen (Just <| Reference canoncial binopName)
 
             Can.Lambda subPatterns expression ->
-              searchExpression location expression
+              searchSubExpression expression
                 |> ifNothingThen (searchPatterns location subPatterns)
 
             Can.Call function args ->
-              searchExpression location function
-                |> ifNothingThen (searchExpressions location args)
+              searchSubExpression function
+                |> ifNothingThen (searchSubExpressions args)
 
             Can.If expressions result ->
-              searchExpression location result
+              searchSubExpression result
                 |> ifNothingThen
                     (List.foldl
                       (\maybeFound (expressionA, expressionB) ->
                         maybeFound
-                          |> ifNothingThen (searchExpression location expressionA)
-                          |> ifNothingThen (searchExpression location expressionB)
+                          |> ifNothingThen (searchSubExpression expressionA)
+                          |> ifNothingThen (searchSubExpression expressionB)
                       )
                       Nothing
                       expressions
                     )
 
             Can.Let definition subExpression ->
-              searchExpression location subExpression
+              searchSubExpression subExpression
                 |> ifNothingThen (searchDefinition location definition)
 
             Can.LetRec definitions subExpression ->
-              searchExpression location subExpression
+              searchSubExpression subExpression
                 |> ifNothingThen (searchDefinitions location definitions)
 
             Can.LetDestruct pattern subExpressionA subExpressionB ->
               searchPattern location pattern
-                |> ifNothingThen (searchExpression location subExpressionA)
-                |> ifNothingThen (searchExpression location subExpressionB)
+                |> ifNothingThen (searchSubExpression subExpressionA)
+                |> ifNothingThen (searchSubExpression subExpressionB)
 
             Can.Case subExpression caseBranches ->
-              searchExpression location subExpression
+              searchSubExpression subExpression
                 |> ifNothingThen (searchCaseBranches location caseBranches)
 
             Can.Accessor name ->
-              Just (RawName name)
+              Just (Raw name)
 
             Can.Access expresion locatedName ->
               locatedName
                 |> isWithin location
-                |> fmap RawName
-                |> ifNothingThen (searchExpression location expresion)
+                |> fmap Raw
+                |> ifNothingThen (searchSubExpression expresion)
 
             Can.Update name expression fieldUpdates ->
-              searchExpression location expression
+              searchSubExpression expression
                 |> ifNothingThen
                     (fieldUpdates
                       |> Map.toList
@@ -327,7 +435,7 @@ searchExpression location locatedExpression =
                             maybeFound
                               |> ifNothingThen
                                 (if location |> isWithinRegion region then
-                                  searchExpression location expression
+                                  searchSubExpression expression
 
                                  else
                                   Nothing
@@ -336,7 +444,7 @@ searchExpression location locatedExpression =
                           Nothing
 
                     )
-                |> ifNothingThen (Just <| RawName name)
+                |> ifNothingThen (Just <| Raw name)
 
             Can.Record map ->
               map
@@ -355,9 +463,9 @@ searchExpression location locatedExpression =
                 |> Just
 
             Can.Tuple subExpressionA subExpressionB wrapperExpression->
-              searchExpression location subExpressionA
-                |> ifNothingThen (searchExpression location subExpressionB)
-                |> ifNothingThen (wrapperExpression |> andThen (searchExpression location))
+              searchSubExpression subExpressionA
+                |> ifNothingThen (searchSubExpression subExpressionB)
+                |> ifNothingThen (wrapperExpression |> andThen searchSubExpression)
 
             _ ->
               Nothing
@@ -400,6 +508,71 @@ isWithinRegion :: R.Region -> Location -> Bool
 isWithinRegion (R.Region (R.Position startLine startCol) (R.Position endLine endCol)) (Location searchLine searchCol) =
   (searchLine >= startLine && searchCol >= startCol)
     && (searchLine <= endLine && searchCol <= endCol)
+
+
+unboxLocated :: A.Located value -> value
+unboxLocated (A.At _ value) =
+  value
+
+
+-- Can.Type helpers
+
+
+getArgAtPosition :: Int -> Can.Type -> Maybe Can.Type
+getArgAtPosition argNumber tipe =
+  case tipe of
+    Can.TLambda type1 type2 ->
+      let
+          nextArgNumber =
+            argNumber - 1
+      in
+      if nextArgNumber == 0 then
+        Just type1
+
+      else
+      getArgAtPosition nextArgNumber type2
+
+    _ ->
+      Nothing
+
+
+typeToText :: Can.Type -> Text
+typeToText tipe =
+  typeToTextHelper tipe ""
+
+
+typeToTextHelper :: Can.Type -> Text -> Text
+typeToTextHelper tipe current =
+  case tipe of
+    Can.TLambda type1 type2 ->
+      typeToTextHelper type2 (typeToTextHelper type1 current <> " -> ")
+
+    Can.TVar name ->
+      current <> N.toText name
+
+    Can.TType canonical name args ->
+      current <>  N.toText name
+
+    Can.TUnit  ->
+      current <>  "()"
+
+    Can.TTuple leftType midType maybeRightType ->
+      current <>
+        "( "
+          <> typeToTextHelper leftType ""
+          <> ", "
+          <> typeToTextHelper midType ""
+          <> (maybeRightType
+              |> fmap
+                  (\rightType ->
+                    typeToTextHelper rightType "" <> ", "
+                  )
+              |> Maybe.fromMaybe ""
+             )
+          <> " )"
+
+    Can.TAlias canonical name map type_ ->
+      current <> N.toText name
 
 
 -- Debug Helpers
