@@ -153,14 +153,15 @@ searchTests =
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
-                  Search.Type (Search.Primitive name) ->
-                    case N.toText name of
-                        "String" ->
-                          return ()
+                  Search.Type _ canType ->
+                    case Search.canTypeToText canType of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type primitive but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a reference but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.Debug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -175,14 +176,15 @@ searchTests =
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
-                  Search.Type (Search.Primitive name) ->
-                    case N.toText name of
+                  Search.Type _ canType ->
+                    case Search.canTypeToText canType of
                         "()" ->
                           return ()
 
                         invalid ->
-                          assertFailure
-                            ("Got a type primitive but was \"" ++ Text.unpack invalid ++ "\" instead of \"()\"")
+                          ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                            |> Text.unpack
+                            |> assertFailure
 
                   Search.Debug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -199,12 +201,13 @@ searchTests =
                 case value of
                   Search.Reference canonical name ->
                     case N.toText name of
-                        "++" ->
-                          return ()
+                      "++" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a reference but the name was \"" ++ Text.unpack invalid ++ "\" instead of \"++\"")
+                      invalid ->
+                        ("Got a reference but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.Debug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -219,14 +222,15 @@ searchTests =
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
-                  Search.Type (Search.Primitive name) ->
-                    case N.toText name of
-                        "String" ->
-                          return ()
+                  Search.Type _ canType ->
+                    case Search.canTypeToText canType of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a reference but the name was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.Debug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -241,18 +245,15 @@ searchTests =
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
-                  Search.Arg _name tipe ->
-                    case tipe of
-                      Can.TType _ typeName _ ->
-                        case N.toText typeName of
-                            "String" ->
-                              return ()
+                  Search.Type _ canType ->
+                    case Search.canTypeToText canType of
+                      "String" ->
+                        return ()
 
-                            invalid ->
-                              assertFailure
-                                ("Got a TType but the name was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
-                      _ ->
-                        assertFailure "Got a type but the name was not a TType"
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.Debug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -275,13 +276,37 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "String" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level un-typed function def"
+        (Task.try (hover 24 3) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "a -> String -> (a -> String) -> String" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"a -> String -> (a -> String) -> String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -297,13 +322,37 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "()" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "()" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"()\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"()\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def"
+        (Task.try (hover 33 3) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "Custom -> Int" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"Custom -> Int\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -319,13 +368,14 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "a" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "a" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"a\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"a\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -341,13 +391,14 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "String" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -363,13 +414,14 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "a -> String" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "a -> String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"a -> String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"a -> String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -385,13 +437,37 @@ hoverTests =
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "String" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def arg that is pattern matched reference"
+        (Task.try (hover 34 20) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)
@@ -401,19 +477,20 @@ hoverTests =
         )
     , testCase
         "Top-level typed function def arg that is pattern matched"
-        (Task.try (hover 34 20) >>= \result ->
+        (Task.try (hover 33 16) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
                   Search.HoverType tipe ->
-                    case tipe of
-                        "String" ->
-                          return ()
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
 
-                        invalid ->
-                          assertFailure
-                            ("Got a type but was \"" ++ Text.unpack invalid ++ "\" instead of \"String\"")
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
 
                   Search.HoverDebug message ->
                     assertFailure ("DEBUG: " ++  message)

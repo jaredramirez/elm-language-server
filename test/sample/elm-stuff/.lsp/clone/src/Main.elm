@@ -23,3 +23,12 @@ fourth arg =
 
 fifth thingToTransform thingToAppend strTransform =
     "appended" ++ (strTransform thingToTransform) ++ thingToAppend
+
+
+type Custom =
+    Custom String
+
+
+sixth : Custom -> Int
+sixth (Custom str) =
+    String.length str
