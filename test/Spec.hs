@@ -148,7 +148,7 @@ searchTests =
     "Search Tests"
     [ testCase
         "Top-level un-typed primitive value search"
-        (Task.try (searchModule 4 11) >>= \result ->
+        (Task.try (searchModule 5 11) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -171,7 +171,7 @@ searchTests =
         )
     , testCase
         "Top-level typed primitive value search"
-        (Task.try (searchModule 8 10) >>= \result ->
+        (Task.try (searchModule 10 5) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -194,7 +194,7 @@ searchTests =
         )
     , testCase
         "Top-level type definition search"
-        (Task.try (searchModule 12 31) >>= \result ->
+        (Task.try (searchModule 15 16) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -217,7 +217,7 @@ searchTests =
         )
     , testCase
         "Let definition type primitive search"
-        (Task.try (searchModule 19 18) >>= \result ->
+        (Task.try (searchModule 22 17) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -240,7 +240,7 @@ searchTests =
         )
        , testCase
         "Let definition variable search"
-        (Task.try (searchModule 19 27) >>= \result ->
+        (Task.try (searchModule 22 26) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -270,7 +270,7 @@ hoverTests =
     "Hover Tests"
     [ testCase
         "Top-level un-typed value def"
-        (Task.try (hover 4 11) >>= \result ->
+        (Task.try (hover 5 11) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -293,7 +293,7 @@ hoverTests =
         )
     , testCase
         "Top-level un-typed function def"
-        (Task.try (hover 24 3) >>= \result ->
+        (Task.try (hover 27 3) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -316,7 +316,7 @@ hoverTests =
         )
     , testCase
         "Top-level typed value def"
-        (Task.try (hover 8 10) >>= \result ->
+        (Task.try (hover 10 5) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -339,18 +339,18 @@ hoverTests =
         )
     , testCase
         "Top-level typed function def"
-        (Task.try (hover 33 3) >>= \result ->
+        (Task.try (hover 36 3) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
                 case value of
                   Search.HoverType tipe ->
                     case Search.canTypeToText tipe of
-                      "Custom -> Int" ->
+                      "Custom -> ( String, Int ) -> Int" ->
                         return ()
 
                       invalid ->
-                        ("Got a type but it was \"" <> invalid <> "\" instead of \"Custom -> Int\"")
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"Custom -> ( String, Int ) -> Int\"")
                           |> Text.unpack
                           |> assertFailure
 
@@ -362,7 +362,7 @@ hoverTests =
         )
     , testCase
         "Top-level un-typed function def un-typed arg"
-        (Task.try (hover 25 41) >>= \result ->
+        (Task.try (hover 28 34) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -385,7 +385,7 @@ hoverTests =
         )
     , testCase
         "Top-level un-typed function def typed arg"
-        (Task.try (hover 25 62) >>= \result ->
+        (Task.try (hover 28 59) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -408,7 +408,7 @@ hoverTests =
         )
     , testCase
         "Top-level un-typed function def typed arg that is a function"
-        (Task.try (hover 25 23) >>= \result ->
+        (Task.try (hover 28 23) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -431,7 +431,7 @@ hoverTests =
         )
     , testCase
         "Top-level typed function def arg that is a bit nested"
-        (Task.try (hover 19 27) >>= \result ->
+        (Task.try (hover 22 27) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -453,8 +453,8 @@ hoverTests =
                     assertFailure "Expected type"
         )
     , testCase
-        "Top-level typed function def arg that is pattern matched reference"
-        (Task.try (hover 34 20) >>= \result ->
+        "Top-level typed function def custom type arg that is pattern matched"
+        (Task.try (hover 36 16) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -476,8 +476,8 @@ hoverTests =
                     assertFailure "Expected type"
         )
     , testCase
-        "Top-level typed function def arg that is pattern matched"
-        (Task.try (hover 33 16) >>= \result ->
+        "Top-level typed function def custom type arg that is pattern matched reference"
+        (Task.try (hover 37 20) >>= \result ->
            case result of
              Left message -> assertFailure (Text.unpack message)
              Right value ->
@@ -497,5 +497,121 @@ hoverTests =
 
                   _ ->
                     assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def tuple arg that is pattern matched"
+        (
+         Task.try (hover 36 23) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ -> assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def tuple arg that is pattern matched reference"
+        (
+         Task.try (hover 36 29) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ -> assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def tuple arg that is pattern matched"
+        (
+         Task.try (hover 36 36) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "Int" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"Int\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ ->
+                    assertFailure "Expected type"
+        )
+    , testCase
+        "Top-level typed function def tuple arg that is pattern matched reference"
+        (
+         Task.try (hover 37 43) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "Int" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"Int\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ -> assertFailure "Expected type"
+        )
+    , testCase
+        "let def custom type that is pattern matched"
+        (
+         Task.try (hover 43 18) >>= \result ->
+           case result of
+             Left message -> assertFailure (Text.unpack message)
+             Right value ->
+                case value of
+                  Search.HoverType tipe ->
+                    case Search.canTypeToText tipe of
+                      "String" ->
+                        return ()
+
+                      invalid ->
+                        ("Got a type but it was \"" <> invalid <> "\" instead of \"String\"")
+                          |> Text.unpack
+                          |> assertFailure
+
+                  Search.HoverDebug message ->
+                    assertFailure ("DEBUG: " ++  message)
+
+                  _ -> assertFailure "Expected type"
         )
     ]
