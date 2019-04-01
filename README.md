@@ -2,6 +2,12 @@
 
 This project implements the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) for Elm.
 
+## Notice
+
+This project is on pause while I'm working on [an error tolerent parser and type solver](https://github.com/jaredramirez/elm-grammar). This will allow for much better diagnostics, type inference, and completion.
+
+This was shift if focus was inspired by the comments made [here](https://elmtown.simplecast.fm/it-just-goes-on-and-on).
+
 ## Platforms
 
 Currently this project only supports MacOS. I'm fairly certain that it works on most linux distros, but I have not tested on it. This is mostly beacuse I'm not an expert on how cross-compiling works with GHC and haven't tackled the problem yet. I'm not sure how it will work on windows at this point.
